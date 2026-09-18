@@ -1,0 +1,3 @@
+{
+  "tests/test_transits_periods.py::test_find_orb_boundary_backward": true
+}
