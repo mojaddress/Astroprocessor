@@ -13,6 +13,98 @@ from .points import is_day_chart, part_of_fortune
 from .utils import normalize_longitude, sign_from_longitude, house_for_longitude
 from .aspects import calculate_aspects
 
+# Версия формата карты (обновляется при изменении структуры результата)
+CHART_FORMAT_VERSION = "0.9.1"
+
+
+def _validate_birth_data(birth):
+    """
+    Проверяет корректность данных рождения.
+
+    Возвращает:
+        список предупреждений (некритичные проблемы)
+
+    Исключения:
+        ValueError при критичных ошибках (неверные данные)
+    """
+    warnings = []
+
+    # Проверка даты рождения
+    try:
+        birth_date = datetime.fromisoformat(birth["date"])
+    except (ValueError, TypeError) as e:
+        raise ValueError(
+            f"Неверный формат даты рождения: {birth.get('date')}. "
+            "Ожидается ГГГГ-ММ-ДД."
+        ) from e
+
+    current_date = datetime.now()
+    if birth_date > current_date:
+        warnings.append(
+            f"Дата рождения ({birth['date']}) в будущем. "
+            "Проверьте правильность ввода."
+        )
+
+    # Проверка времени рождения
+    time_str = birth["time"]
+    try:
+        time_parts = str(time_str).split(":")
+        if len(time_parts) < 2:
+            raise ValueError("Время должно быть в формате ЧЧ:ММ")
+
+        hours = int(time_parts[0])
+        minutes = int(time_parts[1])
+
+        if hours < 0 or hours > 23:
+            raise ValueError(f"Часы должны быть от 0 до 23, получено {hours}")
+        if minutes < 0 or minutes > 59:
+            raise ValueError(f"Минуты должны быть от 0 до 59, получено {minutes}")
+    except (ValueError, TypeError) as e:
+        raise ValueError(
+            f"Неверный формат времени рождения: {birth.get('time')}. {e}"
+        ) from e
+
+    # Проверка координат
+    try:
+        latitude = float(birth["latitude"])
+        longitude = float(birth["longitude"])
+    except (ValueError, TypeError) as e:
+        raise ValueError(
+            "Координаты должны быть числами: "
+            f"latitude={birth.get('latitude')}, longitude={birth.get('longitude')}"
+        ) from e
+
+    if latitude < -90 or latitude > 90:
+        raise ValueError(
+            f"Широта должна быть от -90 до 90, получено {latitude}"
+        )
+
+    if longitude < -180 or longitude > 180:
+        raise ValueError(
+            f"Долгота должна быть от -180 до 180, получено {longitude}"
+        )
+
+    # Проверка UTC offset
+    try:
+        utc_offset = float(birth["utc_offset_hours"])
+    except (ValueError, TypeError) as e:
+        raise ValueError(
+            f"UTC offset должен быть числом, получено: {birth.get('utc_offset_hours')}"
+        ) from e
+
+    if utc_offset < -12 or utc_offset > 14:
+        warnings.append(
+            f"UTC offset ({utc_offset}) выходит за пределы [-12, +14]. "
+            "Проверьте правильность часового пояса."
+        )
+
+    # Проверка имени (не критично, но предупреждаем)
+    name = birth.get("name", "")
+    if not str(name).strip():
+        warnings.append("Имя карты пустое. Рекомендуется задать имя.")
+
+    return warnings
+
 
 def build_natal_chart(birth, settings=None):
     """
@@ -62,10 +154,8 @@ def build_natal_chart(birth, settings=None):
         if field_name not in birth:
             raise ValueError(f"Birth data is missing required field: {field_name}")
 
-    warnings = []
-
-    # Сидерический зодиак поддерживается (добавлен в Этапе 08)
-    # Никаких дополнительных предупреждений не нужно
+    # Валидация входных данных
+    warnings = _validate_birth_data(birth)
 
     initialize_ephemeris(settings)
 
@@ -82,7 +172,6 @@ def build_natal_chart(birth, settings=None):
     settings["longitude"] = birth.get("longitude", 0.0)
 
     objects, object_warnings = calculate_objects(julian_day, settings)
-    
     warnings.extend(object_warnings)
 
     houses = []
@@ -167,14 +256,13 @@ def build_natal_chart(birth, settings=None):
     if settings.get("enabled_aspects"):
         aspects = calculate_aspects(all_objects, settings)
 
-    # Определяем информацию о зодиаке для мета-данных
     zodiac_type = settings.get("zodiac", "tropical")
     ayanamsha = settings.get("ayanamsha", "lahiri")
 
     return {
         "meta": {
             "project": "Astro Processor",
-            "stage": "0.8.0",
+            "stage": CHART_FORMAT_VERSION,
             "mode": "modular",
             "created_at_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "zodiac": zodiac_type,

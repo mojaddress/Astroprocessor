@@ -23,7 +23,7 @@ def test_build_demo_chart():
 
     result = build_natal_chart(birth, settings)
 
-    assert result["meta"]["stage"] == "0.8.0"
+    assert result["meta"]["stage"] == "0.9.1"
 
     assert len(result["planets"]) == 10
 
