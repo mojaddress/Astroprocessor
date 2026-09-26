@@ -19,7 +19,6 @@ from datetime import datetime, timedelta
 
 from .chart import build_natal_chart
 from .constants import DEFAULT_SETTINGS
-from .time_service import parse_local_datetime, datetime_to_jd
 from .utils import normalize_longitude, sign_from_longitude
 from .aspects import calculate_aspects
 
@@ -39,25 +38,13 @@ def calculate_secondary_progressions(birth, progression_date, settings=None):
         settings: настройки расчёта
 
     Возвращает:
-        словарь с прогрессивной картой:
-        - birth: данные рождения
-        - progression_date: дата прогрессии
-        - age_days: возраст в днях (разница между датой прогрессии и датой рождения)
-        - age_years: возраст в годах
-        - progressed_birth: данные для расчёта прогрессивной карты
-        - planets: прогрессивные планеты
-        - houses: прогрессивные дома
-        - additional_points: прогрессивные точки (ASC, MC, Part of Fortune)
-        - objects: все прогрессивные объекты
-        - aspects: аспекты прогрессивных планет между собой
-        - warnings: предупреждения
+        словарь с прогрессивной картой
     """
 
     if settings is None:
         settings = dict(DEFAULT_SETTINGS)
 
-        # Парсим дату и время рождения
-    # Формат: "1990-05-15T14:30" или "1990-05-15T14:30:00"
+    # Парсим дату и время рождения
     birth_datetime = datetime.fromisoformat(f"{birth['date']}T{birth['time']}")
 
     # Парсим только дату рождения (без времени) для вычисления возраста
@@ -67,24 +54,38 @@ def calculate_secondary_progressions(birth, progression_date, settings=None):
     progression_dt = datetime.fromisoformat(progression_date)
 
     # Вычисляем возраст в днях (используем только даты, без времени)
-    # Это предотвращает отрицательный возраст, когда дата прогрессии
-    # совпадает с датой рождения
     age_days_total = (progression_dt - birth_date_only).days
 
-    # Возраст в годах (для информации и для расчёта прогрессивной даты)
+    # Защита: дата прогрессии не может быть раньше даты рождения
+    if age_days_total < 0:
+        return {
+            "birth": birth,
+            "progression_date": progression_date,
+            "progression_type": "secondary",
+            "age_days": age_days_total,
+            "age_years": 0,
+            "planets": [],
+            "houses": [],
+            "additional_points": [],
+            "objects": [],
+            "aspects": [],
+            "warnings": [
+                f"Дата прогрессии ({progression_date}) раньше даты рождения "
+                f"({birth['date']}). Прогрессии не рассчитаны."
+            ],
+        }
+
+    # Возраст в годах
     age_years = age_days_total / 365.25
 
-    # Прогрессивная дата: дата рождения + возраст в годах (как количество дней)
-    # Это и есть принцип вторичных прогрессий: 1 день после рождения = 1 год жизни
-    # Например, для возраста 30 лет прогрессивная дата = дата рождения + 30 дней
+    # Принцип вторичных прогрессий:
+    # 1 день после рождения = 1 год жизни.
+    # Если возраст 30 лет, прибавляем 30 дней к моменту рождения.
     progressed_datetime = birth_datetime + timedelta(days=age_years)
 
-    # Извлекаем дату и время для прогрессивной карты
     progressed_date_str = progressed_datetime.strftime("%Y-%m-%d")
     progressed_time_str = progressed_datetime.strftime("%H:%M")
 
-    # Создаём данные для расчёта прогрессивной карты
-    # Используем те же координаты и часовой пояс, что и для натальной карты
     progressed_birth = {
         "name": birth.get("name", "Progressed"),
         "date": progressed_date_str,
@@ -97,7 +98,6 @@ def calculate_secondary_progressions(birth, progression_date, settings=None):
     # Строим прогрессивную карту
     progressed_chart = build_natal_chart(progressed_birth, settings)
 
-    # Формируем результат
     result = {
         "birth": birth,
         "progression_date": progression_date,
@@ -124,22 +124,12 @@ def calculate_solar_arc_progressions(birth, progression_date, settings=None):
     что и прогрессивное Солнце.
 
     Параметры:
-        birth: данные рождения (словарь с полями:
-               name, date, time, latitude, longitude, utc_offset_hours)
+        birth: данные рождения
         progression_date: дата прогрессии (строка "ГГГГ-ММ-ДД")
         settings: настройки расчёта
 
     Возвращает:
-        словарь с прогрессивной картой солнечной дуги:
-        - birth: данные рождения
-        - progression_date: дата прогрессии
-        - age_years: возраст в годах
-        - solar_arc: величина солнечной дуги
-        - planets: прогрессивные планеты солнечной дуги
-        - houses: прогрессивные дома солнечной дуги
-        - additional_points: прогрессивные точки солнечной дуги
-        - objects: все прогрессивные объекты солнечной дуги
-        - warnings: предупреждения
+        словарь с прогрессивной картой солнечной дуги
     """
 
     if settings is None:
@@ -147,6 +137,22 @@ def calculate_solar_arc_progressions(birth, progression_date, settings=None):
 
     # Сначала рассчитываем вторичные прогрессии, чтобы получить прогрессивное Солнце
     secondary = calculate_secondary_progressions(birth, progression_date, settings)
+
+    # Если вторичные прогрессии не получились (например, дата раньше рождения)
+    if not secondary.get("planets"):
+        return {
+            "birth": birth,
+            "progression_date": progression_date,
+            "progression_type": "solar_arc",
+            "age_days": secondary.get("age_days", 0),
+            "age_years": secondary.get("age_years", 0),
+            "solar_arc": 0.0,
+            "planets": [],
+            "additional_points": [],
+            "objects": [],
+            "aspects": [],
+            "warnings": secondary.get("warnings", []),
+        }
 
     # Находим натальное Солнце
     natal_chart = build_natal_chart(birth, settings)
@@ -161,7 +167,10 @@ def calculate_solar_arc_progressions(birth, progression_date, settings=None):
             "birth": birth,
             "progression_date": progression_date,
             "progression_type": "solar_arc",
-            "warnings": ["Натальное Солнце не найдено. Прогрессии солнечной дуги не рассчитаны."],
+            "warnings": [
+                "Натальное Солнце не найдено. "
+                "Прогрессии солнечной дуги не рассчитаны."
+            ],
         }
 
     # Находим прогрессивное Солнце
@@ -176,7 +185,10 @@ def calculate_solar_arc_progressions(birth, progression_date, settings=None):
             "birth": birth,
             "progression_date": progression_date,
             "progression_type": "solar_arc",
-            "warnings": ["Прогрессивное Солнце не найдено. Прогрессии солнечной дуги не рассчитаны."],
+            "warnings": [
+                "Прогрессивное Солнце не найдено. "
+                "Прогрессии солнечной дуги не рассчитаны."
+            ],
         }
 
     # Вычисляем солнечную дугу
@@ -216,13 +228,13 @@ def calculate_solar_arc_progressions(birth, progression_date, settings=None):
         }
         solar_arc_additional.append(new_obj)
 
-    # Объединяем все объекты
     all_objects = list(solar_arc_planets) + list(solar_arc_additional)
 
-    # Вычисляем аспекты между прогрессивными объектами солнечной дуги
-    aspects = calculate_aspects(all_objects, settings) if settings.get("enabled_aspects") else []
+    # Аспекты между прогрессивными объектами солнечной дуги
+    aspects = []
+    if settings.get("enabled_aspects"):
+        aspects = calculate_aspects(all_objects, settings)
 
-    # Формируем результат
     result = {
         "birth": birth,
         "progression_date": progression_date,
@@ -244,10 +256,6 @@ def find_progression_aspects(natal_objects, progressed_objects, settings=None):
     """
     Находит аспекты между прогрессивными и натальными точками.
 
-    Это основной способ использования прогрессий:
-    аспекты прогрессивных планет к натальным точкам указывают
-    на внутренние изменения и события.
-
     Параметры:
         natal_objects: список объектов натальной карты
         progressed_objects: список объектов прогрессивной карты
@@ -260,13 +268,10 @@ def find_progression_aspects(natal_objects, progressed_objects, settings=None):
     if settings is None:
         settings = DEFAULT_SETTINGS
 
-    # Используем ту же логику, что и для транзитов:
-    # прогрессивные объекты как "транзитные", натальные как "натальные"
     from .transits import find_transits_on_date
 
     aspects = find_transits_on_date(natal_objects, progressed_objects, settings)
 
-    # Переименовываем поля для прогрессий
     progression_aspects = []
     for aspect in aspects:
         progression_aspect = {
