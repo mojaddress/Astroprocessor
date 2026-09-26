@@ -1,10 +1,46 @@
-﻿.vs/
+﻿# Python bytecode and cache
+__pycache__/
+*.py[cod]
+*.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments (ОЧЕНЬ ВАЖНО)
+.venv/
+venv/
+ENV/
+env/
+
+# IDEs and Editors
 .vscode/
-*.log
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
 .DS_Store
 Thumbs.db
-__pycache__/
-node_modules/
+
+# Environment variables and secrets
 .env
-*.pyc
-.idea/
+.env.local
+*.pem
+
+# Logs
+*.log
