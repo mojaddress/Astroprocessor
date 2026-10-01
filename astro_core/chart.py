@@ -106,6 +106,36 @@ def _validate_birth_data(birth):
     return warnings
 
 
+def _filter_enabled_planets(objects, enabled_planets):
+    """
+    Отфильтровывает список объектов, оставляя только включённые планеты.
+
+    Это реализация «исключения из расчётов» (Решение №3):
+    исключённые планеты не попадают в результат карты, поэтому
+    они автоматически не участвуют в аспектах, транзитах и прогрессиях.
+
+    Объекты, не являющиеся планетами (лунные узлы, Хирон), не затрагиваются —
+    они управляются собственными флагами include_nodes / include_chiron.
+
+    Параметры:
+        objects: список рассчитанных объектов
+        enabled_planets: список имён планет, которые нужно оставить.
+                         Если None — фильтрация не выполняется
+                         (обратная совместимость со старым поведением).
+
+    Возвращает:
+        отфильтрованный список объектов
+    """
+    if enabled_planets is None:
+        return objects
+
+    enabled_set = set(enabled_planets)
+    return [
+        obj for obj in objects
+        if obj.get("type") != "planet" or obj["name"] in enabled_set
+    ]
+
+
 def build_natal_chart(birth, settings=None):
     """
     Собирает полную натальную карту.
@@ -117,6 +147,10 @@ def build_natal_chart(birth, settings=None):
     Настройки могут содержать:
         zodiac: тип зодиака - "tropical" или "sidereal" (по умолчанию "tropical")
         ayanamsha: система ayanamsha для сидерического зодиака (по умолчанию "lahiri")
+        enabled_planets: список планет, которые должны остаться в карте.
+                         Если отсутствует или None — рассчитываются все планеты.
+                         Управляется профилями отображения через
+                         display_profiles.apply_profile_to_settings().
 
     Возвращает:
         словарь с картой, готовый к сохранению в JSON
@@ -192,6 +226,13 @@ def build_natal_chart(birth, settings=None):
 
     for obj in objects:
         obj["house"] = house_for_longitude(cusp_longitudes, obj["longitude"])
+
+    # ============================================================
+    # Фильтр «включённые планеты» из профиля отображения (шаг 2.2).
+    # Применяется ДО расчёта Part of Fortune и аспектов, чтобы
+    # исключённые планеты не участвовали ни в каких дальнейших расчётах.
+    # ============================================================
+    objects = _filter_enabled_planets(objects, settings.get("enabled_planets"))
 
     all_objects = list(objects)
     additional_points = []

@@ -1,3 +1,18 @@
+from pathlib import Path
+
+# ============================================================
+# Пути проекта
+# ============================================================
+
+# Корень проекта: родительская папка пакета astro_core/.
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+# Путь к файлам эфемерид Swiss Ephemeris по умолчанию (папка ephe/ в корне проекта).
+# Строится абсолютным, чтобы работать независимо от текущей рабочей директории:
+# из папки проекта, из тестов, из командной строки.
+# Важно: Хирон и астероиды рассчитываются только при наличии файлов эфемерид.
+DEFAULT_EPHE_PATH = str(PROJECT_ROOT / "ephe")
+
 SIGNS = [
     "Aries",
     "Taurus",
@@ -39,7 +54,7 @@ DEFAULT_SETTINGS = {
     "include_nodes": True,
     "include_part_of_fortune": True,
     "include_angles": True,
-    "ephe_path": None,
+    "ephe_path": DEFAULT_EPHE_PATH,
     "enabled_aspects": [
         "conjunction",
         "sextile",
@@ -55,6 +70,7 @@ DEFAULT_SETTINGS = {
         "sextile": 4.0,
     },
 }
+
 # ============================================================
 # Русские названия для отображения в интерфейсе
 # ============================================================
@@ -117,26 +133,21 @@ DIRECTION_NAMES_RU = {
     "retrograde": "Ретроградное",
 }
 
-
 def get_planet_name_ru(name):
     """Возвращает русское название планеты или точки."""
     return PLANET_NAMES_RU.get(name, name)
-
 
 def get_sign_name_ru(name):
     """Возвращает русское название знака зодиака."""
     return SIGN_NAMES_RU.get(name, name)
 
-
 def get_aspect_name_ru(name):
     """Возвращает русское название аспекта."""
     return ASPECT_NAMES_RU.get(name, name)
 
-
 def get_object_type_name_ru(name):
     """Возвращает русское название типа объекта."""
     return OBJECT_TYPE_NAMES_RU.get(name, name)
-
 
 def get_direction_name_ru(name):
     """Возвращает русское название направления движения."""
@@ -202,7 +213,6 @@ AYANAMSHA_SYSTEMS = {
 
 # Система ayanamsha по умолчанию
 DEFAULT_AYANAMSHA = "lahiri"
-
 
 def get_ayanamsha_name_ru(ayanamsha_key):
     """Возвращает русское название системы ayanamsha."""

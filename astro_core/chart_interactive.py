@@ -2,7 +2,11 @@
 Модуль интерактивного отображения карт с поддержкой Zet9-style тултипов.
 """
 import uuid
-from .chart_svg import render_natal_chart_svg, render_transit_chart_svg
+from .chart_svg import (
+    render_natal_chart_svg,
+    render_transit_chart_svg,
+    DEFAULT_PLANET_DOT_SIZE,
+)
 
 # Стили для тултипа и контейнера карты.
 # ВАЖНО: убрана фиксированная высота 85vh, чтобы контейнер не создавал
@@ -140,7 +144,6 @@ document.addEventListener('DOMContentLoaded', function() {{
 </script>
 """
 
-
 def _make_interactive_html(svg_content):
     """Оборачивает SVG в HTML с интерактивностью."""
     svg_id = f"astro-svg-{uuid.uuid4().hex[:8]}"
@@ -149,22 +152,28 @@ def _make_interactive_html(svg_content):
     html += _INTERACTIVE_SCRIPT_TEMPLATE.format(svg_id=svg_id)
     return html
 
-
-def render_interactive_chart(chart_data, size=800, show_aspects=True, label_mode="symbols"):
-    """Генерирует интерактивную натальную карту."""
+def render_interactive_chart(chart_data, size=800, show_aspects=True, label_mode="symbols",
+                             show_houses=True, planet_dot_size=DEFAULT_PLANET_DOT_SIZE,
+                             planet_colors=None, aspect_colors=None):
+    """Генерирует интерактивную натальную карту (шаг 2.3/2.4: параметры внешнего вида)."""
     svg_content = render_natal_chart_svg(
-        chart_data, size=size, show_aspects=show_aspects, label_mode=label_mode
+        chart_data, size=size, show_aspects=show_aspects, label_mode=label_mode,
+        show_houses=show_houses, planet_dot_size=planet_dot_size,
+        planet_colors=planet_colors, aspect_colors=aspect_colors,
     )
     return _make_interactive_html(svg_content)
 
-
 def render_interactive_transit_chart(natal_chart, transit_planets, transit_aspects,
                                      size=800, label_mode="symbols", show_aspects=True,
-                                     transit_houses=None, transit_additional_points=None):
-    """Генерирует интерактивную транзитную карту."""
+                                     transit_houses=None, transit_additional_points=None,
+                                     show_houses=True, planet_dot_size=DEFAULT_PLANET_DOT_SIZE,
+                                     planet_colors=None, aspect_colors=None):
+    """Генерирует интерактивную транзитную карту (шаг 2.3/2.4: параметры внешнего вида)."""
     svg_content = render_transit_chart_svg(
         natal_chart, transit_planets, transit_aspects, size=size, label_mode=label_mode,
         show_aspects=show_aspects, transit_houses=transit_houses,
-        transit_additional_points=transit_additional_points
+        transit_additional_points=transit_additional_points,
+        show_houses=show_houses, planet_dot_size=planet_dot_size,
+        planet_colors=planet_colors, aspect_colors=aspect_colors,
     )
     return _make_interactive_html(svg_content)
