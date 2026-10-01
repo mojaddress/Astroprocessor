@@ -11,7 +11,9 @@
 Поддерживает:
 - три режима подписей: слова, символы, оба варианта;
 - масштабирование (зум);
-- перемещение (панорамирование).
+- перемещение (панорамирование);
+- настройку внешнего вида из профилей отображения (шаг 2.3):
+  цвета планет и аспектов, размер точек, показ домов.
 
 Режим подписей по умолчанию: "symbols" (только символы).
 
@@ -39,7 +41,10 @@ R_HOUSES = 0.370
 R_PLANETS = 0.325
 R_ASPECTS = 0.295
 
-# Цвета для аспектов
+# Размер точки планеты по умолчанию
+DEFAULT_PLANET_DOT_SIZE = 5
+
+# Цвета для аспектов (палитра по умолчанию)
 ASPECT_COLORS = {
     "conjunction": "#FF6B00",
     "sextile": "#2E86AB",
@@ -48,7 +53,7 @@ ASPECT_COLORS = {
     "opposition": "#7B2D8B",
 }
 
-# Цвета планет
+# Цвета планет (палитра по умолчанию)
 PLANET_COLORS = {
     "Sun": "#FF9900",
     "Moon": "#757575",
@@ -151,16 +156,9 @@ PLANET_FONT_SIZES = {
 # Параметры умного смещения планет при наложении
 # ============================================================
 
-# Максимум смещений одной планеты внутрь (защита от выхода за границы)
 MAX_PLANET_SHIFTS = 3
-
-# Шаг смещения (доля от размера карты)
 PLANET_SHIFT_STEP = 0.025
-
-# Минимально допустимый радиус для планет (доля от размера)
 MIN_PLANET_RADIUS_RATIO = 0.25
-
-# Порог близости двух планет в градусах, при котором включается смещение
 PLANET_PROXIMITY_DEG = 5.0
 
 # ============================================================
@@ -223,17 +221,8 @@ def _resolve_planet_radius(lon, size, base_radius, used_positions):
     """
     Умное смещение планеты при наложении на уже размещённые планеты.
 
-    Исправление: ограничено число смещений и минимальный радиус,
+    Ограничено число смещений и минимальный радиус,
     чтобы планеты не выходили за пределы карты при большом стеллиуме.
-
-    Параметры:
-        lon: долгота планеты
-        size: размер карты
-        base_radius: базовый радиус размещения
-        used_positions: список кортежей (долгота, радиус) уже размещённых планет
-
-    Возвращает:
-        итоговый радиус для планеты
     """
     radius = base_radius
     min_radius = size * MIN_PLANET_RADIUS_RATIO
@@ -252,6 +241,18 @@ def _resolve_planet_radius(lon, size, base_radius, used_positions):
                 shifts += 1
 
     return radius
+
+
+def _merge_colors(default_palette, overrides):
+    """
+    Объединяет палитру по умолчанию с переопределениями из профиля.
+
+    То, что не переопределено, берётся из палитры по умолчанию.
+    """
+    merged = dict(default_palette)
+    if overrides:
+        merged.update(overrides)
+    return merged
 
 
 # ============================================================
@@ -319,7 +320,9 @@ def _svg_text(x, y, text, font_size=12, fill="black", anchor="middle",
 # ============================================================
 
 def render_natal_chart_svg(chart_data, size=DEFAULT_SIZE, show_aspects=True,
-                           label_mode="symbols", zoom=1.0, offset_x=0.0, offset_y=0.0):
+                           label_mode="symbols", zoom=1.0, offset_x=0.0, offset_y=0.0,
+                           show_houses=True, planet_dot_size=DEFAULT_PLANET_DOT_SIZE,
+                           planet_colors=None, aspect_colors=None):
     """
     Рисует натальную карту в формате SVG.
 
@@ -331,6 +334,10 @@ def render_natal_chart_svg(chart_data, size=DEFAULT_SIZE, show_aspects=True,
         zoom: масштаб (1.0 = 100%)
         offset_x: смещение по горизонтали
         offset_y: смещение по вертикали
+        show_houses: отображать ли дома (шаг 2.3)
+        planet_dot_size: радиус точек планет (шаг 2.3)
+        planet_colors: переопределение цветов планет (шаг 2.3)
+        aspect_colors: переопределение цветов аспектов (шаг 2.3)
 
     Возвращает:
         строку с SVG-кодом
@@ -347,6 +354,10 @@ def render_natal_chart_svg(chart_data, size=DEFAULT_SIZE, show_aspects=True,
     use_symbols = _is_symbol_mode(label_mode)
     sign_font_size = SIGN_FONT_SIZES.get(label_mode, 10)
     planet_font_size = PLANET_FONT_SIZES.get(label_mode, 9)
+
+    # Палитры с учётом переопределений из профиля
+    final_planet_colors = _merge_colors(PLANET_COLORS, planet_colors)
+    final_aspect_colors = _merge_colors(ASPECT_COLORS, aspect_colors)
 
     svg_parts = []
 
@@ -377,10 +388,10 @@ def render_natal_chart_svg(chart_data, size=DEFAULT_SIZE, show_aspects=True,
             font_size=sign_font_size, fill="black", use_symbol_font=use_symbols
         ))
 
-    # 3. Дома
+    # 3. Дома (отображаются, если включены профилем)
     houses = chart_data.get("houses", [])
 
-    if houses:
+    if houses and show_houses:
         for house in houses:
             cusp_lon = house.get("longitude")
             if cusp_lon is None:
@@ -423,7 +434,7 @@ def render_natal_chart_svg(chart_data, size=DEFAULT_SIZE, show_aspects=True,
         x, y = longitude_to_svg_coords(lon, radius, cx, cy)
         planet_positions[planet_name] = (x, y)
 
-        base_color = PLANET_COLORS.get(planet_name, "black")
+        base_color = final_planet_colors.get(planet_name, "black")
         is_retrograde = planet.get("retrograde", False)
 
         dot_stroke = "#D62828" if is_retrograde else "none"
@@ -435,7 +446,7 @@ def render_natal_chart_svg(chart_data, size=DEFAULT_SIZE, show_aspects=True,
         speed_lon = planet.get("speed_longitude", 0)
 
         svg_parts.append(
-            f'  <circle cx="{x:.2f}" cy="{y:.2f}" r="5" fill="{base_color}" '
+            f'  <circle cx="{x:.2f}" cy="{y:.2f}" r="{planet_dot_size}" fill="{base_color}" '
             f'stroke="{dot_stroke}" stroke-width="{dot_stroke_width}" '
             f'class="planet-dot" data-planet="{planet_ru}" '
             f'data-lon="{lon:.6f}" data-speed="{speed_lon:.6f}" '
@@ -493,7 +504,7 @@ def render_natal_chart_svg(chart_data, size=DEFAULT_SIZE, show_aspects=True,
                 x1, y1 = planet_positions[point_a]
                 x2, y2 = planet_positions[point_b]
 
-                color = ASPECT_COLORS.get(aspect_name, "gray")
+                color = final_aspect_colors.get(aspect_name, "gray")
                 svg_parts.append(_svg_line(x1, y1, x2, y2, stroke=color,
                                            stroke_width=0.8, opacity=0.7))
 
@@ -517,7 +528,9 @@ COLOR_TRANSIT = "#2A9D8F"
 
 def render_transit_chart_svg(natal_chart, transit_planets, transit_aspects,
                              size=DEFAULT_SIZE, label_mode="symbols", show_aspects=True,
-                             transit_houses=None, transit_additional_points=None):
+                             transit_houses=None, transit_additional_points=None,
+                             show_houses=True, planet_dot_size=DEFAULT_PLANET_DOT_SIZE,
+                             planet_colors=None, aspect_colors=None):
     """
     Рисует транзитную карту в формате SVG.
 
@@ -530,6 +543,10 @@ def render_transit_chart_svg(natal_chart, transit_planets, transit_aspects,
         show_aspects: отображать ли аспекты
         transit_houses: дома транзита (опционально)
         transit_additional_points: углы транзита (ASC, MC, опционально)
+        show_houses: отображать ли дома — натальные и транзитные (шаг 2.3)
+        planet_dot_size: радиус точек планет (шаг 2.3)
+        planet_colors: переопределение цветов планет (шаг 2.3)
+        aspect_colors: переопределение цветов аспектов (шаг 2.3)
 
     Возвращает:
         строку с SVG-кодом
@@ -546,6 +563,10 @@ def render_transit_chart_svg(natal_chart, transit_planets, transit_aspects,
     use_symbols = _is_symbol_mode(label_mode)
     sign_font_size = SIGN_FONT_SIZES.get(label_mode, 10)
     planet_font_size = PLANET_FONT_SIZES.get(label_mode, 9)
+
+    # Палитры с учётом переопределений из профиля
+    final_planet_colors = _merge_colors(PLANET_COLORS, planet_colors)
+    final_aspect_colors = _merge_colors(ASPECT_COLORS, aspect_colors)
 
     svg_parts = []
 
@@ -577,10 +598,10 @@ def render_transit_chart_svg(natal_chart, transit_planets, transit_aspects,
             font_size=sign_font_size, fill="black", use_symbol_font=use_symbols
         ))
 
-    # 3. Дома (из натальной карты)
+    # 3. Дома (из натальной карты, если включены)
     houses = natal_chart.get("houses", [])
 
-    if houses:
+    if houses and show_houses:
         for house in houses:
             cusp_lon = house.get("longitude")
             if cusp_lon is None:
@@ -603,8 +624,8 @@ def render_transit_chart_svg(natal_chart, transit_planets, transit_aspects,
             svg_parts.append(_svg_text(x_text, y_text, str(house_number),
                                        font_size=14, fill="gray"))
 
-    # 3.5. Дома транзита (если переданы)
-    if transit_houses:
+    # 3.5. Дома транзита (если переданы и дома включены)
+    if transit_houses and show_houses:
         for house in transit_houses:
             cusp_lon = house.get("longitude")
             if cusp_lon is None:
@@ -648,7 +669,7 @@ def render_transit_chart_svg(natal_chart, transit_planets, transit_aspects,
         natal_positions[planet_name] = (x, y)
 
         is_retrograde = planet.get("retrograde", False)
-        base_color = PLANET_COLORS.get(planet_name, COLOR_NATAL)
+        base_color = final_planet_colors.get(planet_name, COLOR_NATAL)
         dot_stroke = "#D62828" if is_retrograde else "none"
         dot_stroke_width = 1.5 if is_retrograde else 0
 
@@ -656,7 +677,7 @@ def render_transit_chart_svg(natal_chart, transit_planets, transit_aspects,
         sign_ru = get_sign_name_ru(planet.get("sign", ""))
 
         svg_parts.append(
-            f'  <circle cx="{x:.2f}" cy="{y:.2f}" r="5" fill="{base_color}" '
+            f'  <circle cx="{x:.2f}" cy="{y:.2f}" r="{planet_dot_size}" fill="{base_color}" '
             f'stroke="{dot_stroke}" stroke-width="{dot_stroke_width}" '
             f'class="natal-planet" data-planet="{planet_ru}" '
             f'data-lon="{lon:.6f}" data-speed="0" '
@@ -694,7 +715,7 @@ def render_transit_chart_svg(natal_chart, transit_planets, transit_aspects,
         transit_positions[planet_name] = (x, y)
 
         is_retrograde = planet.get("retrograde", False)
-        base_color = PLANET_COLORS.get(planet_name, COLOR_TRANSIT)
+        base_color = final_planet_colors.get(planet_name, COLOR_TRANSIT)
         dot_stroke = "#D62828" if is_retrograde else "none"
         dot_stroke_width = 1.5 if is_retrograde else 0
 
@@ -703,7 +724,7 @@ def render_transit_chart_svg(natal_chart, transit_planets, transit_aspects,
         speed_lon = planet.get("speed_longitude", 0)
 
         svg_parts.append(
-            f'  <circle cx="{x:.2f}" cy="{y:.2f}" r="5" fill="{base_color}" '
+            f'  <circle cx="{x:.2f}" cy="{y:.2f}" r="{planet_dot_size}" fill="{base_color}" '
             f'stroke="{dot_stroke}" stroke-width="{dot_stroke_width}" '
             f'class="transit-planet" data-planet="{planet_ru}" '
             f'data-lon="{lon:.6f}" data-speed="{speed_lon:.6f}" '
@@ -734,7 +755,7 @@ def render_transit_chart_svg(natal_chart, transit_planets, transit_aspects,
                 x1, y1 = natal_positions[point_a]
                 x2, y2 = natal_positions[point_b]
 
-                color = ASPECT_COLORS.get(aspect_name, "gray")
+                color = final_aspect_colors.get(aspect_name, "gray")
                 svg_parts.append(_svg_line(x1, y1, x2, y2, stroke=color,
                                            stroke_width=0.8, opacity=0.6))
 
@@ -749,7 +770,7 @@ def render_transit_chart_svg(natal_chart, transit_planets, transit_aspects,
                 x1, y1 = transit_positions[transit_planet_name]
                 x2, y2 = natal_positions[natal_point_name]
 
-                color = ASPECT_COLORS.get(aspect_name, "gray")
+                color = final_aspect_colors.get(aspect_name, "gray")
                 svg_parts.append(_svg_line(x1, y1, x2, y2, stroke=color,
                                            stroke_width=1, stroke_dasharray="4,3",
                                            opacity=0.8))

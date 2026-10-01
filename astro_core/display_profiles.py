@@ -379,3 +379,33 @@ def validate_profile(profile):
         errors.append(f"Недопустимый label_mode: {label_mode}")
 
     return errors
+
+# ============================================================
+# Параметры рендеринга для chart_svg
+# ============================================================
+
+def get_render_kwargs(profile):
+    """
+    Формирует готовые параметры отрисовки для функций chart_svg
+    из настроек внешнего вида профиля.
+
+    Использование:
+        render_natal_chart_svg(chart_data, **get_render_kwargs(profile))
+        render_transit_chart_svg(natal, transits, aspects, **get_render_kwargs(profile))
+
+    Параметры:
+        profile: профиль отображения
+
+    Возвращает:
+        словарь параметров для функций отрисовки
+    """
+    appearance = get_appearance(profile)
+    return {
+        "size": appearance["chart_size"],
+        "show_aspects": appearance["show_aspect_lines"],
+        "label_mode": appearance["label_mode"],
+        "show_houses": appearance["show_houses"],
+        "planet_dot_size": appearance["planet_dot_size"],
+        "planet_colors": appearance["planet_colors"],
+        "aspect_colors": appearance["aspect_colors"],
+    }
