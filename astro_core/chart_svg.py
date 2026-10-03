@@ -67,6 +67,7 @@ PLANET_COLORS = {
     "Pluto": "#660000",
     "MeanNode": "#666666",
     "TrueNode": "#666666",
+    "SouthNode": "#999999",
     "Chiron": "#996633",
 }
 
@@ -88,8 +89,9 @@ PLANET_DISPLAY_NAMES = {
     "Uranus": "Уран",
     "Neptune": "Нептун",
     "Pluto": "Плутон",
-    "MeanNode": "Узел",
-    "TrueNode": "Узел",
+    "MeanNode": "Сев.Узел",
+    "TrueNode": "Сев.Узел",
+    "SouthNode": "Юж.Узел",
     "Chiron": "Хирон",
 }
 
@@ -136,6 +138,7 @@ PLANET_SYMBOLS = {
     "Pluto": "♇",
     "MeanNode": "☊",
     "TrueNode": "☊",
+    "SouthNode": "☋",
     "Chiron": "⚷",
 }
 

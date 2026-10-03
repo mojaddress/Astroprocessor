@@ -155,6 +155,31 @@ transit_single_date = date.today()
 transit_start_date = date.today()
 transit_end_date = date.today() + timedelta(days=7)
 
+# -------- КЛЮЧИ ПРОФИЛЯ ОТОБРАЖЕНИЯ (Правка A) --------
+if "display_profile_selector" not in st.session_state:
+    st.session_state["display_profile_selector"] = "full"
+if "flag_recalculate_chart" not in st.session_state:
+    st.session_state["flag_recalculate_chart"] = False
+if "display_profile_error" not in st.session_state:
+    st.session_state["display_profile_error"] = None
+
+# -------- ЗНАЧЕНИЯ ПО УМОЛЧАНИЮ для переменных левой панели --------
+# Защита от ошибки, если панель свёрнута, но сработал автопересчёт карты.
+name = st.session_state.get("input_name", "Иван")
+birth_date = st.session_state.get("input_birth_date", date(1990, 5, 15))
+birth_time = st.session_state.get("input_birth_time", time(14, 30))
+latitude = st.session_state.get("profile_data", {}).get("latitude", 0.0)
+longitude = st.session_state.get("profile_data", {}).get("longitude", 0.0)
+utc_offset = st.session_state.get("profile_data", {}).get("utc_offset", 0.0)
+house_system = "placidus"
+zodiac_type = "tropical"
+ayanamsha = "lahiri"
+include_chiron = st.session_state.get("chk_chiron", True)
+include_nodes = st.session_state.get("chk_nodes", True)
+include_fortune = st.session_state.get("chk_fortune", True)
+include_angles = st.session_state.get("chk_angles", True)
+ephe_path = "ephe"
+
 show_left = st.session_state["show_left_panel"]
 show_right = st.session_state["show_right_panel"]
 
@@ -188,9 +213,53 @@ col_left, col_center, col_right = st.columns([left_w, 3.6, right_w])
 # ЛЕВАЯ ПАНЕЛЬ: входные данные
 # ============================================================
 
+# Функция-колбэк применения профиля отображения (Правка B).
+# Передаётся в кнопку через on_click, поэтому выполняется ДО создания
+# виджетов и может безопасно менять любые ключи session_state.
+def apply_display_profile_callback():
+    try:
+        profile_name = st.session_state.get("display_profile_selector", "full")
+        _prof = load_display_profile(profile_name)
+        _objs = _prof.get("objects", {})
+        _asps = _prof.get("aspects", {})
+        _app = _prof.get("appearance", {})
+
+        # Объекты (чекбоксы в «Дополнительных настройках»)
+        st.session_state["chk_chiron"] = bool(_objs.get("Chiron", True))
+        st.session_state["chk_nodes"] = bool(_objs.get("LunarNodes", True))
+        st.session_state["chk_fortune"] = bool(_objs.get("PartOfFortune", True))
+        st.session_state["chk_angles"] = bool(_objs.get("Angles", True))
+
+        # Планеты и аспекты
+        st.session_state["sel_planets"] = [p for p in ALL_PLANETS if _objs.get(p, True)]
+        st.session_state["sel_aspects"] = [a for a in ALL_ASPECTS if _asps.get(a, {}).get("enabled", True)]
+        for _a in ALL_ASPECTS:
+            st.session_state[f"orb_{_a}"] = float(_asps.get(_a, {}).get("orb", DEFAULT_ORBS[_a]))
+
+        # Внешний вид
+        st.session_state["radio_label_mode"] = _app.get("label_mode", "symbols")
+        st.session_state["chk_show_aspects"] = bool(_app.get("show_aspect_lines", True))
+        st.session_state["chk_show_houses"] = bool(_app.get("show_houses", True))
+        st.session_state["slider_chart_size"] = int(_app.get("chart_size", 800))
+        st.session_state["slider_dot_size"] = int(_app.get("planet_dot_size", 5))
+        for _p in ALL_PLANETS:
+            if _p in _app.get("planet_colors", {}):
+                st.session_state[f"color_{_p}"] = _app["planet_colors"][_p]
+        for _a in ALL_ASPECTS:
+            if _a in _app.get("aspect_colors", {}):
+                st.session_state[f"acolor_{_a}"] = _app["aspect_colors"][_a]
+
+        # Запомнить имя профиля и заказать автопересчёт карты
+        st.session_state["sel_display_profile_name"] = profile_name
+        st.session_state["flag_recalculate_chart"] = True
+        st.session_state["display_profile_error"] = None
+    except Exception as error:
+        st.session_state["display_profile_error"] = str(error)
+
+
 if show_left:
     with col_left:
-        # -------- ПРОФИЛИ --------
+        # -------- ПРОФИЛИ РОЖДЕНИЯ --------
         st.markdown("##### 👤 Профили")
 
         profiles = list_profiles()
@@ -271,7 +340,6 @@ if show_left:
         st.divider()
 
         # -------- ДАННЫЕ РОЖДЕНИЯ --------
-        # Восстанавливаем данные профиля из хранилища, если ключи виджетов отсутствуют
         _pd = st.session_state.get("profile_data", {})
         if _pd:
             if "input_name" not in st.session_state:
@@ -298,7 +366,6 @@ if show_left:
         )
         birth_time = st.time_input("Время рождения", value=time(14, 30), key="input_birth_time")
 
-        # Технические данные рассчитанной карты
         if "chart_result" in st.session_state:
             _res = st.session_state["chart_result"]
             with st.expander("🔢 Технические данные карты", expanded=False):
@@ -347,11 +414,7 @@ if show_left:
                         except ValueError:
                             utc_offset = 0.0
 
-                    with st.expander(f"📍 {selected_city['name']}: координаты и пояс"):
-                        st.write(f"Широта: {latitude:.4f}")
-                        st.write(f"Долгота: {longitude:.4f}")
-                        st.write(f"Часовой пояс: {timezone_name}")
-                        st.write(f"Смещение от Гринвича: {utc_offset:+.2f} ч")
+                    st.caption(f"📍 {latitude:.4f}, {longitude:.4f} · {timezone_name} · UTC{utc_offset:+.2f}")
                 else:
                     latitude, longitude, utc_offset = 0.0, 0.0, 0.0
             else:
@@ -361,13 +424,12 @@ if show_left:
             longitude = st.number_input("Долгота", min_value=-180.0, max_value=180.0, value=37.6173, format="%.4f", key="input_longitude")
             utc_offset = st.number_input("Смещение UTC (часы)", min_value=-12.0, max_value=14.0, value=3.0, format="%.1f", key="input_utc_offset")
 
-        # Сохраняем текущие данные в хранилище профиля
         st.session_state["profile_data"].update({
             "name": name, "birth_date": birth_date, "birth_time": birth_time,
             "coord_source": coord_source, "latitude": latitude, "longitude": longitude, "utc_offset": utc_offset,
         })
 
-        # -------- СОХРАНЕНИЕ ПРОФИЛЯ --------
+        # -------- СОХРАНЕНИЕ ПРОФИЛЯ РОЖДЕНИЯ --------
         editing_profile = st.session_state.get("editing_profile")
 
         if editing_profile:
@@ -410,31 +472,7 @@ if show_left:
 
         st.divider()
 
-        # -------- НАСТРОЙКИ КАРТЫ --------
-        st.markdown("##### ⚙️ Настройки карты")
-
-        house_system = st.selectbox(
-            "Система домов", ["placidus", "koch", "equal", "whole_sign", "porphyry"], index=0,
-        )
-
-        zodiac_type_display = st.radio("Тип зодиака", ["Тропический", "Сидерический"], index=0)
-        zodiac_type = "tropical" if zodiac_type_display == "Тропический" else "sidereal"
-
-        ayanamsha = "lahiri"
-        if zodiac_type == "sidereal":
-            ayanamsha_display = st.selectbox("Система аянамши", ["Лахири", "Раман", "Кришнамурти", "Фаган-Брэдли"], index=0)
-            ayanamsha = {"Лахири": "lahiri", "Раман": "raman", "Кришнамурти": "krishnamurti", "Фаган-Брэдли": "fagan_brady"}[ayanamsha_display]
-
-        # Чекбоксы объектов управляются профилем отображения (шаг 2.4)
-        include_chiron = st.checkbox("Хирон", key="chk_chiron")
-        include_nodes = st.checkbox("Лунные узлы", key="chk_nodes")
-        include_fortune = st.checkbox("Part of Fortune", key="chk_fortune")
-        include_angles = st.checkbox("ASC/MC", key="chk_angles")
-
-        ephe_path = st.text_input("Путь к эфемеридам", value="ephe")
-
-        # -------- ПРОФИЛЬ ОТОБРАЖЕНИЯ (шаг 2.4) --------
-        st.divider()
+        # -------- ПРОФИЛЬ ОТОБРАЖЕНИЯ (поднят выше — Правка B) --------
         st.markdown("##### 🎨 Профиль отображения")
 
         display_profiles_list = list_display_profiles()
@@ -442,63 +480,30 @@ if show_left:
         if not display_profile_options:
             display_profile_options = ["full"]
 
-        _saved_dp = st.session_state.get("sel_display_profile_name", "full")
-        _dp_index = display_profile_options.index(_saved_dp) if _saved_dp in display_profile_options else 0
-
         selected_display_profile = st.selectbox(
-            "Профиль", options=display_profile_options, index=_dp_index,
+            "Профиль", options=display_profile_options, key="display_profile_selector",
         )
 
         new_display_profile_name = st.text_input(
-            "Имя для сохранения", value=_saved_dp, key="new_display_profile_name"
+            "Имя для сохранения",
+            value=st.session_state.get("sel_display_profile_name", "full"),
+            key="new_display_profile_name",
         )
 
         dp_c1, dp_c2 = st.columns(2)
         with dp_c1:
-            apply_display_profile_btn = st.button("📥 Применить", use_container_width=True)
+            st.button(
+                "📥 Применить",
+                key="btn_apply_display_profile",
+                on_click=apply_display_profile_callback,
+                use_container_width=True,
+            )
         with dp_c2:
             save_display_profile_btn = st.button("💾 Сохранить", use_container_width=True)
 
-        # ОБРАБОТЧИКИ ПРОФИЛЯ ОТОБРАЖЕНИЯ.
-        # ВАЖНО: они стоят ДО виджетов редактора — это требование Streamlit
-        # (состояние виджета нельзя менять после его создания в том же запуске).
-        if apply_display_profile_btn:
-            try:
-                _prof = load_display_profile(selected_display_profile)
-                _objs = _prof.get("objects", {})
-                st.session_state["sel_planets"] = [p for p in ALL_PLANETS if _objs.get(p, True)]
-                st.session_state["chk_chiron"] = bool(_objs.get("Chiron", True))
-                st.session_state["chk_nodes"] = bool(_objs.get("LunarNodes", True))
-                st.session_state["chk_fortune"] = bool(_objs.get("PartOfFortune", True))
-                st.session_state["chk_angles"] = bool(_objs.get("Angles", True))
-
-                _asps = _prof.get("aspects", {})
-                st.session_state["sel_aspects"] = [
-                    a for a in ALL_ASPECTS if _asps.get(a, {}).get("enabled", True)
-                ]
-                for _a in ALL_ASPECTS:
-                    st.session_state[f"orb_{_a}"] = float(_asps.get(_a, {}).get("orb", DEFAULT_ORBS[_a]))
-
-                _app = _prof.get("appearance", {})
-                st.session_state["radio_label_mode"] = _app.get("label_mode", "symbols")
-                st.session_state["chk_show_aspects"] = bool(_app.get("show_aspect_lines", True))
-                st.session_state["chk_show_houses"] = bool(_app.get("show_houses", True))
-                st.session_state["slider_chart_size"] = int(_app.get("chart_size", 800))
-                st.session_state["slider_dot_size"] = int(_app.get("planet_dot_size", 5))
-
-                _p_colors = _app.get("planet_colors", {})
-                for _p in ALL_PLANETS:
-                    if _p in _p_colors:
-                        st.session_state[f"color_{_p}"] = _p_colors[_p]
-                _a_colors = _app.get("aspect_colors", {})
-                for _a in ALL_ASPECTS:
-                    if _a in _a_colors:
-                        st.session_state[f"acolor_{_a}"] = _a_colors[_a]
-
-                st.session_state["sel_display_profile_name"] = selected_display_profile
-                st.rerun()
-            except Exception as error:
-                st.error(f"Ошибка применения профиля отображения: {error}")
+        if st.session_state.get("display_profile_error"):
+            st.error(f"Ошибка применения профиля отображения: {st.session_state['display_profile_error']}")
+            st.session_state["display_profile_error"] = None
 
         if save_display_profile_btn:
             _dp_name = (new_display_profile_name or "").strip()
@@ -552,6 +557,7 @@ if show_left:
                     try:
                         save_display_profile(_new_profile)
                         st.session_state["sel_display_profile_name"] = _dp_name
+                        st.session_state["display_profile_selector"] = _dp_name
                         st.rerun()
                     except Exception as error:
                         st.error(f"Ошибка сохранения профиля отображения: {error}")
@@ -562,7 +568,7 @@ if show_left:
                 "Планеты", options=list(ALL_PLANETS),
                 format_func=get_planet_name_ru, key="sel_planets",
             )
-            st.caption("Хирон, узлы, Part of Fortune и ASC/MC — чекбоксы выше, в «Настройках карты».")
+            st.caption("Хирон, узлы, Part of Fortune и ASC/MC — чекбоксы в «Дополнительных настройках» ниже.")
 
             display_aspects = st.multiselect(
                 "Аспекты", options=list(ALL_ASPECTS),
@@ -620,6 +626,27 @@ if show_left:
                     with ac2:
                         st.color_picker(get_aspect_name_ru(_aspect_b), key=f"acolor_{_aspect_b}")
 
+        # -------- ДОПОЛНИТЕЛЬНЫЕ НАСТРОЙКИ (свёрнуты — Правка B) --------
+        with st.expander("⚙️ Дополнительные настройки", expanded=False):
+            house_system = st.selectbox(
+                "Система домов", ["placidus", "koch", "equal", "whole_sign", "porphyry"], index=0,
+            )
+
+            zodiac_type_display = st.radio("Тип зодиака", ["Тропический", "Сидерический"], index=0)
+            zodiac_type = "tropical" if zodiac_type_display == "Тропический" else "sidereal"
+
+            ayanamsha = "lahiri"
+            if zodiac_type == "sidereal":
+                ayanamsha_display = st.selectbox("Система аянамши", ["Лахири", "Раман", "Кришнамурти", "Фаган-Брэдли"], index=0)
+                ayanamsha = {"Лахири": "lahiri", "Раман": "raman", "Кришнамурти": "krishnamurti", "Фаган-Брэдли": "fagan_brady"}[ayanamsha_display]
+
+            include_chiron = st.checkbox("Хирон", key="chk_chiron")
+            include_nodes = st.checkbox("Лунные узлы", key="chk_nodes")
+            include_fortune = st.checkbox("Part of Fortune", key="chk_fortune")
+            include_angles = st.checkbox("ASC/MC", key="chk_angles")
+
+            ephe_path = st.text_input("Путь к эфемеридам", value="ephe")
+
         calculate_button = st.button("🔮 Рассчитать карту", type="primary", use_container_width=True)
         
     # ============================================================
@@ -639,7 +666,10 @@ if show_left:
                     index=0,
                 )
 
-                planet_options = list(DEFAULT_TRANSIT_PLANETS)
+                # Опции фильтра — только планеты из профиля рассчитанной натальной карты (шаг 2.5)
+                planet_options = list(
+                    st.session_state.get("settings", {}).get("enabled_planets", DEFAULT_TRANSIT_PLANETS)
+                )
                 selected_planets = st.multiselect(
                     "Транзитные планеты (пусто = все)", options=planet_options,
                     format_func=get_planet_name_ru, default=[],
@@ -732,7 +762,9 @@ if show_left:
 # ОБРАБОТЧИК: расчёт натальной карты
 # ============================================================
 
-if calculate_button:
+need_recalc = st.session_state.get("flag_recalculate_chart", False)
+if calculate_button or need_recalc:
+    st.session_state["flag_recalculate_chart"] = False
     birth = {
         "name": name,
         "date": birth_date.strftime("%Y-%m-%d"),
@@ -792,6 +824,10 @@ if calculate_transits_button and "chart_result" in st.session_state:
         end_date = transit_end_date.strftime("%Y-%m-%d")
 
     transit_settings = dict(st.session_state["settings"])
+    # Ограничиваем транзитные планеты планетами натальной карты (шаг 2.5):
+    # транзиты строятся только для планет, включённых в профиль на момент расчёта карты.
+    if "enabled_planets" in transit_settings:
+        transit_settings["transit_planets"] = list(transit_settings["enabled_planets"])
     filter_planets = selected_planets if selected_planets else None
     filter_aspects = selected_aspects if selected_aspects else None
 
