@@ -273,6 +273,20 @@ def calculate_objects(julian_day, settings=None):
 
             objects.append(obj)
 
+            # Нисходящий (Южный) узел всегда в 180° от Восходящего (Северного).
+            south_longitude = normalize_longitude(longitude + 180.0)
+            south_sign, south_degree = sign_from_longitude(south_longitude)
+            south_obj = {
+                "name": "SouthNode",
+                "type": "point",
+                "longitude": round(south_longitude, 6),
+                "sign": south_sign,
+                "degree_in_sign": round(south_degree, 6),
+                "speed_longitude": round(speed_longitude, 6),
+                "retrograde": is_retrograde,
+            }
+            objects.append(south_obj)
+
         except Exception as e:
             warnings.append(f"Не удалось рассчитать лунные узлы: {e}")
 
