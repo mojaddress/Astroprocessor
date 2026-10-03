@@ -66,12 +66,15 @@ st.markdown(
     .stButton > button, .stDownloadButton > button {
         font-size: 0.78rem; padding: 0.3rem 0.5rem; height: auto; line-height: 1.2;
     }
-    .stTextInput input, .stDateInput input, .stTimeInput input, .stNumberInput input {
+    .stTextInput input, .stDateInput input, .stTimeInput input, .stNumberInput input, .stSelectbox select {
         font-size: 0.82rem;
     }
     label { font-size: 0.8rem; }
-    /* Убираем лишние боковые отступы у центральной колонки */
     div[data-testid="column"] { padding: 0 !important; }
+    /* Плотнее элементы в левой панели */
+    div[data-testid="stVerticalBlock"] > div { gap: 0.35rem; }
+    div[data-testid="stExpander"] { margin-bottom: 0.2rem; }
+    .stCheckbox { min-height: 1.6rem; }
     </style>
     """,
     unsafe_allow_html=True,
@@ -256,6 +259,9 @@ def apply_display_profile_callback():
     except Exception as error:
         st.session_state["display_profile_error"] = str(error)
 
+def trigger_recalc_callback():
+    """Устанавливает флаг автопересчёта карты при изменении настроек."""
+    st.session_state["flag_recalculate_chart"] = True
 
 if show_left:
     with col_left:
@@ -360,11 +366,14 @@ if show_left:
         st.markdown("##### 📅 Данные рождения")
 
         name = st.text_input("Имя", key="input_name")
-        birth_date = st.date_input(
-            "Дата рождения", value=date(1990, 5, 15),
-            min_value=date(1900, 1, 1), max_value=date(2100, 12, 31), key="input_birth_date",
-        )
-        birth_time = st.time_input("Время рождения", value=time(14, 30), key="input_birth_time")
+        _c_date, _c_time = st.columns(2)
+        with _c_date:
+            birth_date = st.date_input(
+                "Дата", value=date(1990, 5, 15),
+                min_value=date(1900, 1, 1), max_value=date(2100, 12, 31), key="input_birth_date",
+            )
+        with _c_time:
+            birth_time = st.time_input("Время", value=time(14, 30), key="input_birth_time")
 
         if "chart_result" in st.session_state:
             _res = st.session_state["chart_result"]
@@ -414,15 +423,19 @@ if show_left:
                         except ValueError:
                             utc_offset = 0.0
 
-                    st.caption(f"📍 {latitude:.4f}, {longitude:.4f} · {timezone_name} · UTC{utc_offset:+.2f}")
+                    st.caption(f"🏙️ {selected_city_display} · {latitude:.2f}, {longitude:.2f} · UTC{utc_offset:+.1f}")
                 else:
                     latitude, longitude, utc_offset = 0.0, 0.0, 0.0
             else:
                 st.warning("Город не найден.")
         else:
-            latitude = st.number_input("Широта", min_value=-90.0, max_value=90.0, value=55.7558, format="%.4f", key="input_latitude")
-            longitude = st.number_input("Долгота", min_value=-180.0, max_value=180.0, value=37.6173, format="%.4f", key="input_longitude")
-            utc_offset = st.number_input("Смещение UTC (часы)", min_value=-12.0, max_value=14.0, value=3.0, format="%.1f", key="input_utc_offset")
+            _c_lat, _c_lon, _c_utc = st.columns(3)
+            with _c_lat:
+                latitude = st.number_input("Широта", min_value=-90.0, max_value=90.0, value=55.7558, format="%.4f", key="input_latitude")
+            with _c_lon:
+                longitude = st.number_input("Долгота", min_value=-180.0, max_value=180.0, value=37.6173, format="%.4f", key="input_longitude")
+            with _c_utc:
+                utc_offset = st.number_input("UTC (ч)", min_value=-12.0, max_value=14.0, value=3.0, format="%.1f", key="input_utc_offset")
 
         st.session_state["profile_data"].update({
             "name": name, "birth_date": birth_date, "birth_time": birth_time,
@@ -628,22 +641,27 @@ if show_left:
 
         # -------- ДОПОЛНИТЕЛЬНЫЕ НАСТРОЙКИ (свёрнуты — Правка B) --------
         with st.expander("⚙️ Дополнительные настройки", expanded=False):
-            house_system = st.selectbox(
-                "Система домов", ["placidus", "koch", "equal", "whole_sign", "porphyry"], index=0,
-            )
-
-            zodiac_type_display = st.radio("Тип зодиака", ["Тропический", "Сидерический"], index=0)
+            _c_house, _c_zodiac = st.columns(2)
+            with _c_house:
+                house_system = st.selectbox(
+                    "Дома", ["placidus", "koch", "equal", "whole_sign", "porphyry"], index=0,
+                )
+            with _c_zodiac:
+                zodiac_type_display = st.radio("Зодиак", ["Тропический", "Сидерический"], index=0)
             zodiac_type = "tropical" if zodiac_type_display == "Тропический" else "sidereal"
 
             ayanamsha = "lahiri"
             if zodiac_type == "sidereal":
-                ayanamsha_display = st.selectbox("Система аянамши", ["Лахири", "Раман", "Кришнамурти", "Фаган-Брэдли"], index=0)
+                ayanamsha_display = st.selectbox("Аянамша", ["Лахири", "Раман", "Кришнамурти", "Фаган-Брэдли"], index=0)
                 ayanamsha = {"Лахири": "lahiri", "Раман": "raman", "Кришнамурти": "krishnamurti", "Фаган-Брэдли": "fagan_brady"}[ayanamsha_display]
 
-            include_chiron = st.checkbox("Хирон", key="chk_chiron")
-            include_nodes = st.checkbox("Лунные узлы", key="chk_nodes")
-            include_fortune = st.checkbox("Part of Fortune", key="chk_fortune")
-            include_angles = st.checkbox("ASC/MC", key="chk_angles")
+            _o1, _o2 = st.columns(2)
+            with _o1:
+                include_chiron = st.checkbox("Хирон", key="chk_chiron", on_change=trigger_recalc_callback)
+                include_fortune = st.checkbox("Part of Fortune", key="chk_fortune", on_change=trigger_recalc_callback)
+            with _o2:
+                include_nodes = st.checkbox("Лунные узлы", key="chk_nodes", on_change=trigger_recalc_callback)
+                include_angles = st.checkbox("ASC/MC", key="chk_angles", on_change=trigger_recalc_callback)
 
             ephe_path = st.text_input("Путь к эфемеридам", value="ephe")
 
