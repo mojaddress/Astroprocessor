@@ -842,10 +842,12 @@ if calculate_transits_button and "chart_result" in st.session_state:
         end_date = transit_end_date.strftime("%Y-%m-%d")
 
     transit_settings = dict(st.session_state["settings"])
-    # Ограничиваем транзитные планеты планетами натальной карты (шаг 2.5):
-    # транзиты строятся только для планет, включённых в профиль на момент расчёта карты.
+    
+    # Шаг 2.5: передаём enabled_planets из профиля как transit_planets для ядра транзитов
+    # Ядро транзитов ищет ключ "transit_planets", а в профиле ключ "enabled_planets"
     if "enabled_planets" in transit_settings:
         transit_settings["transit_planets"] = list(transit_settings["enabled_planets"])
+    
     filter_planets = selected_planets if selected_planets else None
     filter_aspects = selected_aspects if selected_aspects else None
 
