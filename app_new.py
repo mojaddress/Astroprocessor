@@ -10,7 +10,7 @@ project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 # Import and run the new Streamlit app
-from ui_streamlit.app_streamlit import *
+from ui_streamlit.app_streamlit import main as run_app
 
-# The app_streamlit.py runs on import due to Streamlit's execution model
-# This file exists for compatibility with existing run commands
+if __name__ == "__main__":
+    run_app()
