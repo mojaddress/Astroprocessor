@@ -42,33 +42,33 @@ R_PLANETS = 0.325
 R_ASPECTS = 0.295
 
 # Размер точки планеты по умолчанию
-DEFAULT_PLANET_DOT_SIZE = 5
+DEFAULT_PLANET_DOT_SIZE = 6
 
-# Цвета для аспектов (палитра по умолчанию)
+# Цвета для аспектов (палитра по умолчанию) - более яркие и насыщенные
 ASPECT_COLORS = {
-    "conjunction": "#FF6B00",
-    "sextile": "#2E86AB",
-    "square": "#D62828",
-    "trine": "#2A9D8F",
-    "opposition": "#7B2D8B",
+    "conjunction": "#FF4500",    # OrangeRed
+    "sextile": "#1E90FF",        # DodgerBlue
+    "square": "#DC143C",         # Crimson
+    "trine": "#228B22",          # ForestGreen
+    "opposition": "#8A2BE2",     # BlueViolet
 }
 
-# Цвета планет (палитра по умолчанию)
+# Цвета планет (палитра по умолчанию) - более яркие и насыщенные
 PLANET_COLORS = {
-    "Sun": "#FF9900",
-    "Moon": "#757575",
-    "Mercury": "#E6A800",
-    "Venus": "#339933",
-    "Mars": "#CC0000",
-    "Jupiter": "#993399",
-    "Saturn": "#000000",
-    "Uranus": "#0099CC",
-    "Neptune": "#006666",
-    "Pluto": "#660000",
-    "MeanNode": "#666666",
-    "TrueNode": "#666666",
-    "SouthNode": "#999999",
-    "Chiron": "#996633",
+    "Sun": "#FF8C00",        # DarkOrange
+    "Moon": "#808080",       # Gray
+    "Mercury": "#DAA520",    # Goldenrod
+    "Venus": "#32CD32",      # LimeGreen
+    "Mars": "#FF4500",       # OrangeRed
+    "Jupiter": "#9932CC",    # DarkOrchid
+    "Saturn": "#1C1C1C",     # Very Dark Gray
+    "Uranus": "#00BFFF",     # DeepSkyBlue
+    "Neptune": "#008B8B",    # DarkCyan
+    "Pluto": "#8B0000",      # DarkRed
+    "MeanNode": "#696969",   # DimGray
+    "TrueNode": "#696969",   # DimGray
+    "SouthNode": "#A9A9A9",  # DarkGray
+    "Chiron": "#8B4513",     # SaddleBrown
 }
 
 FONT_FAMILY = "Segoe UI, Arial, sans-serif"
@@ -142,17 +142,17 @@ PLANET_SYMBOLS = {
     "Chiron": "⚷",
 }
 
-# Размеры шрифтов в зависимости от режима подписей
+# Размеры шрифтов в зависимости от режима подписей - увеличены для лучшей читаемости
 SIGN_FONT_SIZES = {
-    "symbols": 18,
-    "both": 14,
-    "words": 12,
+    "symbols": 22,
+    "both": 18,
+    "words": 16,
 }
 
 PLANET_FONT_SIZES = {
-    "symbols": 22,
-    "both": 16,
-    "words": 12,
+    "symbols": 26,
+    "both": 20,
+    "words": 16,
 }
 
 # ============================================================
@@ -275,7 +275,18 @@ def _svg_header(size, zoom, offset_x, offset_y):
         f'<svg xmlns="http://www.w3.org/2000/svg" '
         f'width="{size}" height="{size}" '
         f'viewBox="{view_x:.2f} {view_y:.2f} {view_size:.2f} {view_size:.2f}" '
-        f'style="background-color: white;">\n'
+        f'style="background-color: white; shape-rendering: geometricPrecision; text-rendering: geometricPrecision;">\n'
+        f'<defs>\n'
+        f'  <style type="text/css"><![CDATA[\n'
+        f'    text {{ font-family: "Segoe UI Symbol", "Segoe UI", "Arial Unicode MS", "DejaVu Sans", Arial, sans-serif; }}\n'
+        f'    .sign-text {{ font-weight: bold; }}\n'
+        f'    .planet-text {{ font-weight: bold; }}\n'
+        f'    .aspect-line {{ fill: none; stroke-linecap: round; stroke-linejoin: round; }}\n'
+        f'    .house-line {{ fill: none; stroke-linecap: round; }}\n'
+        f'    .planet-dot {{ fill-rule: evenodd; }}\n'
+        f'  ]]></style>\n'
+        f'</defs>\n'
+        f'  <rect width="{size}" height="{size}" fill="white"/>\n'
     )
 
 
@@ -296,25 +307,26 @@ def _svg_circle(cx, cy, r, stroke="black", stroke_width=1, fill="none",
 
 
 def _svg_line(x1, y1, x2, y2, stroke="black", stroke_width=1, opacity=1.0,
-              stroke_dasharray=None):
+              stroke_dasharray=None, css_class=None):
     """Генерирует линию."""
     dash = f' stroke-dasharray="{stroke_dasharray}"' if stroke_dasharray else ""
+    cls = f' class="{css_class}"' if css_class else ""
     return (
         f'  <line x1="{x1:.2f}" y1="{y1:.2f}" x2="{x2:.2f}" y2="{y2:.2f}" '
-        f'stroke="{stroke}" stroke-width="{stroke_width}"{dash} opacity="{opacity}"/>\n'
+        f'stroke="{stroke}" stroke-width="{stroke_width}"{dash} opacity="{opacity}"{cls}/>\n'
     )
 
 
 def _svg_text(x, y, text, font_size=12, fill="black", anchor="middle",
-              weight="normal", use_symbol_font=False):
+              weight="normal", use_symbol_font=False, css_class=None):
     """Генерирует текст."""
     escaped_text = escape(str(text))
     font_family = FONT_FAMILY_SYMBOLS if use_symbol_font else FONT_FAMILY
+    cls = f' class="{css_class}"' if css_class else ""
     return (
-        f'  <text x="{x:.2f}" y="{y:.2f}" '
-        f'font-family="{font_family}" font-size="{font_size}" '
-        f'fill="{fill}" text-anchor="{anchor}" font-weight="{weight}">'
-        f'{escaped_text}</text>\n'
+        f'  <text x="{x:.2f}" y="{y:.2f}" text-anchor="{anchor}" '
+        f'font-family="{font_family}" font-size="{font_size}" font-weight="{weight}" '
+        f'fill="{fill}"{cls}>{escaped_text}</text>\n'
     )
 
 
@@ -323,9 +335,11 @@ def _svg_text(x, y, text, font_size=12, fill="black", anchor="middle",
 # ============================================================
 
 def render_natal_chart_svg(chart_data, size=DEFAULT_SIZE, show_aspects=True,
-                           label_mode="symbols", zoom=1.0, offset_x=0.0, offset_y=0.0,
-                           show_houses=True, planet_dot_size=DEFAULT_PLANET_DOT_SIZE,
-                           planet_colors=None, aspect_colors=None):
+                            label_mode="symbols", zoom=1.0, offset_x=0.0, offset_y=0.0,
+                            show_houses=True, planet_dot_size=DEFAULT_PLANET_DOT_SIZE,
+                            planet_colors=None, aspect_colors=None,
+                            show_planet_labels=True, show_asteroid_labels=True,
+                            show_node_labels=True, show_angle_labels=True):
     """
     Рисует натальную карту в формате SVG.
 
@@ -341,6 +355,10 @@ def render_natal_chart_svg(chart_data, size=DEFAULT_SIZE, show_aspects=True,
         planet_dot_size: радиус точек планет (шаг 2.3)
         planet_colors: переопределение цветов планет (шаг 2.3)
         aspect_colors: переопределение цветов аспектов (шаг 2.3)
+        show_planet_labels: показывать ли названия планет
+        show_asteroid_labels: показывать ли названия астероидов (Хирон)
+        show_node_labels: показывать ли названия узлов (Раху/Кету)
+        show_angle_labels: показывать ли ASC/MC
 
     Возвращает:
         строку с SVG-кодом
@@ -368,19 +386,19 @@ def render_natal_chart_svg(chart_data, size=DEFAULT_SIZE, show_aspects=True,
     svg_parts.append(f'  <rect width="{size}" height="{size}" fill="white"/>\n')
 
     # 1. Круги
-    svg_parts.append(_svg_circle(cx, cy, r_outer, stroke="black", stroke_width=2))
-    svg_parts.append(_svg_circle(cx, cy, r_zodiac, stroke="black", stroke_width=1))
-    svg_parts.append(_svg_circle(cx, cy, r_houses, stroke="black", stroke_width=0.5,
-                                 stroke_dasharray="4,2"))
-    svg_parts.append(_svg_circle(cx, cy, r_aspects, stroke="gray", stroke_width=0.5,
-                                 stroke_dasharray="2,2"))
+    svg_parts.append(_svg_circle(cx, cy, r_outer, stroke="#1a1a1a", stroke_width=2.5))
+    svg_parts.append(_svg_circle(cx, cy, r_zodiac, stroke="#2a2a2a", stroke_width=1.5))
+    svg_parts.append(_svg_circle(cx, cy, r_houses, stroke="#4a4a4a", stroke_width=0.8,
+                                 stroke_dasharray="6,4"))
+    svg_parts.append(_svg_circle(cx, cy, r_aspects, stroke="#6a6a6a", stroke_width=0.6,
+                                 stroke_dasharray="4,3"))
 
     # 2. Знаки зодиака
     for i, sign in enumerate(SIGNS):
         boundary_lon = i * 30.0
         x1, y1 = longitude_to_svg_coords(boundary_lon, r_zodiac, cx, cy)
         x2, y2 = longitude_to_svg_coords(boundary_lon, r_outer, cx, cy)
-        svg_parts.append(_svg_line(x1, y1, x2, y2, stroke="black", stroke_width=0.8))
+        svg_parts.append(_svg_line(x1, y1, x2, y2, stroke="#3a3a3a", stroke_width=1.0, css_class="sign-line"))
 
         mid_lon = boundary_lon + 15.0
         x_text, y_text = longitude_to_svg_coords(mid_lon, (r_zodiac + r_outer) / 2, cx, cy)
@@ -388,7 +406,7 @@ def render_natal_chart_svg(chart_data, size=DEFAULT_SIZE, show_aspects=True,
         sign_label = _get_sign_label(sign, label_mode)
         svg_parts.append(_svg_text(
             x_text, y_text, sign_label,
-            font_size=sign_font_size, fill="black", use_symbol_font=use_symbols
+            font_size=sign_font_size, fill="#1a1a1a", use_symbol_font=use_symbols, weight="bold", css_class="sign-text"
         ))
 
     # 3. Дома (отображаются, если включены профилем)
@@ -403,8 +421,8 @@ def render_natal_chart_svg(chart_data, size=DEFAULT_SIZE, show_aspects=True,
             x1, y1 = longitude_to_svg_coords(cusp_lon, r_aspects, cx, cy)
             x2, y2 = longitude_to_svg_coords(cusp_lon, r_houses, cx, cy)
 
-            lw = 1.5 if house.get("house") == 1 else 0.8
-            svg_parts.append(_svg_line(x1, y1, x2, y2, stroke="black", stroke_width=lw))
+            lw = 1.8 if house.get("house") == 1 else 1.0
+            svg_parts.append(_svg_line(x1, y1, x2, y2, stroke="#2a2a2a", stroke_width=lw, css_class="house-line"))
 
             house_number = house.get("house", 0)
             next_idx = house_number % len(houses)
@@ -415,7 +433,7 @@ def render_natal_chart_svg(chart_data, size=DEFAULT_SIZE, show_aspects=True,
             x_text, y_text = longitude_to_svg_coords(mid_lon, (r_aspects + r_houses) / 2, cx, cy)
 
             svg_parts.append(_svg_text(x_text, y_text, str(house_number),
-                                       font_size=9, fill="gray"))
+                                       font_size=11, fill="#4a4a4a", weight="bold"))
 
     # 4. Планеты (исправленный блок умного смещения)
     planets = chart_data.get("planets", [])
@@ -440,31 +458,45 @@ def render_natal_chart_svg(chart_data, size=DEFAULT_SIZE, show_aspects=True,
         base_color = final_planet_colors.get(planet_name, "black")
         is_retrograde = planet.get("retrograde", False)
 
-        dot_stroke = "#D62828" if is_retrograde else "none"
-        dot_stroke_width = 1.5 if is_retrograde else 0
+        dot_stroke = "#D62828" if is_retrograde else "#ffffff"
+        dot_stroke_width = 2.0 if is_retrograde else 1.0
 
         # Подготавливаем данные для тултипов
         planet_ru = get_planet_name_ru(planet_name)
         sign_ru = get_sign_name_ru(planet.get("sign", ""))
         speed_lon = planet.get("speed_longitude", 0)
 
+        # Use exact planet_dot_size for consistent rendering
+        dot_size = planet_dot_size
+
         svg_parts.append(
-            f'  <circle cx="{x:.2f}" cy="{y:.2f}" r="{planet_dot_size}" fill="{base_color}" '
+            f'  <circle cx="{x:.2f}" cy="{y:.2f}" r="{dot_size}" fill="{base_color}" '
             f'stroke="{dot_stroke}" stroke-width="{dot_stroke_width}" '
             f'class="planet-dot" data-planet="{planet_ru}" '
             f'data-lon="{lon:.6f}" data-speed="{speed_lon:.6f}" '
             f'data-sign="{sign_ru}"/>\n'
         )
 
-        planet_label = _get_planet_label(planet_name, label_mode)
-        text_color = "black" if base_color in ("#000000", "#660000") else base_color
+        # Показывать название планеты в зависимости от типа объекта и настроек
+        should_show_label = False
+        if planet_name in ["Chiron"]:
+            should_show_label = show_asteroid_labels
+        elif planet_name in ["MeanNode", "TrueNode", "SouthNode"]:
+            should_show_label = show_node_labels
+        else:
+            should_show_label = show_planet_labels
+        
+        if should_show_label:
+            planet_label = _get_planet_label(planet_name, label_mode)
+            # Better text color for contrast
+            text_color = "#1a1a1a" if base_color in ("#000000", "#660000", "#8B0000", "#1C1C1C") else "#ffffff"
 
-        x_label, y_label = longitude_to_svg_coords(lon, radius + size * 0.035, cx, cy)
-        svg_parts.append(_svg_text(
-            x_label, y_label, planet_label,
-            font_size=planet_font_size, fill=text_color,
-            use_symbol_font=use_symbols, weight="bold"
-        ))
+            x_label, y_label = longitude_to_svg_coords(lon, radius + size * 0.04, cx, cy)
+            svg_parts.append(_svg_text(
+                x_label, y_label, planet_label,
+                font_size=planet_font_size, fill=text_color,
+                use_symbol_font=use_symbols, weight="bold", css_class="planet-text"
+            ))
 
     # 5. ASC и MC
     additional_points = chart_data.get("additional_points", [])
@@ -476,23 +508,24 @@ def render_natal_chart_svg(chart_data, size=DEFAULT_SIZE, show_aspects=True,
         if point_name is None or lon is None:
             continue
 
-        if point_name == "ASC":
-            x1, y1 = longitude_to_svg_coords(lon, r_houses, cx, cy)
-            x2, y2 = longitude_to_svg_coords(lon, r_outer, cx, cy)
-            svg_parts.append(_svg_line(x1, y1, x2, y2, stroke="red", stroke_width=2))
+        if show_angle_labels:
+            if point_name == "ASC":
+                x1, y1 = longitude_to_svg_coords(lon, r_houses, cx, cy)
+                x2, y2 = longitude_to_svg_coords(lon, r_outer, cx, cy)
+                svg_parts.append(_svg_line(x1, y1, x2, y2, stroke="#E74C3C", stroke_width=2.5, css_class="angle-line"))
 
-            x_text, y_text = longitude_to_svg_coords(lon, r_outer + size * 0.035, cx, cy)
-            svg_parts.append(_svg_text(x_text, y_text, "ASC",
-                                       font_size=16, fill="red", weight="bold"))
+                x_text, y_text = longitude_to_svg_coords(lon, r_outer + size * 0.04, cx, cy)
+                svg_parts.append(_svg_text(x_text, y_text, "ASC",
+                                           font_size=18, fill="#E74C3C", weight="bold", css_class="angle-text"))
 
-        elif point_name == "MC":
-            x1, y1 = longitude_to_svg_coords(lon, r_houses, cx, cy)
-            x2, y2 = longitude_to_svg_coords(lon, r_outer, cx, cy)
-            svg_parts.append(_svg_line(x1, y1, x2, y2, stroke="blue", stroke_width=2))
+            elif point_name == "MC":
+                x1, y1 = longitude_to_svg_coords(lon, r_houses, cx, cy)
+                x2, y2 = longitude_to_svg_coords(lon, r_outer, cx, cy)
+                svg_parts.append(_svg_line(x1, y1, x2, y2, stroke="#3498DB", stroke_width=2.5, css_class="angle-line"))
 
-            x_text, y_text = longitude_to_svg_coords(lon, r_outer + size * 0.035, cx, cy)
-            svg_parts.append(_svg_text(x_text, y_text, "MC",
-                                       font_size=16, fill="blue", weight="bold"))
+                x_text, y_text = longitude_to_svg_coords(lon, r_outer + size * 0.04, cx, cy)
+                svg_parts.append(_svg_text(x_text, y_text, "MC",
+                                           font_size=18, fill="#3498DB", weight="bold", css_class="angle-text"))
 
     # 6. Аспекты (опционально)
     if show_aspects:
@@ -525,15 +558,17 @@ TR_TRANSIT = 0.360
 TR_NATAL = 0.280
 TR_ASPECTS = 0.240
 
-COLOR_NATAL = "#2E86AB"
-COLOR_TRANSIT = "#2A9D8F"
+COLOR_NATAL = "#1E90FF"    # DodgerBlue
+COLOR_TRANSIT = "#FF4500"  # OrangeRed
 
 
 def render_transit_chart_svg(natal_chart, transit_planets, transit_aspects,
                              size=DEFAULT_SIZE, label_mode="symbols", show_aspects=True,
                              transit_houses=None, transit_additional_points=None,
                              show_houses=True, planet_dot_size=DEFAULT_PLANET_DOT_SIZE,
-                             planet_colors=None, aspect_colors=None):
+                             planet_colors=None, aspect_colors=None,
+                             show_planet_labels=True, show_asteroid_labels=True,
+                             show_node_labels=True, show_angle_labels=True):
     """
     Рисует транзитную карту в формате SVG.
 
@@ -550,6 +585,10 @@ def render_transit_chart_svg(natal_chart, transit_planets, transit_aspects,
         planet_dot_size: радиус точек планет (шаг 2.3)
         planet_colors: переопределение цветов планет (шаг 2.3)
         aspect_colors: переопределение цветов аспектов (шаг 2.3)
+        show_planet_labels: показывать ли названия планет
+        show_asteroid_labels: показывать ли названия астероидов (Хирон)
+        show_node_labels: показывать ли названия узлов (Раху/Кету)
+        show_angle_labels: показывать ли ASC/MC
 
     Возвращает:
         строку с SVG-кодом

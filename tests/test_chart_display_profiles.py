@@ -124,7 +124,7 @@ def test_chiron_kept_with_ephe_path():
 
 
 def test_classic_profile_integration():
-    """Классический профиль: без внешних планет, Хирона и узлов."""
+    """Классический профиль: без внешних планет и Хирона, но с лунными узлами."""
     profile = dp.get_builtin_profile("classic")
     settings = dp.apply_profile_to_settings(profile)
     result = build_natal_chart(DEMO_BIRTH, settings)
@@ -133,7 +133,7 @@ def test_classic_profile_integration():
     assert "Neptune" not in names
     assert "Pluto" not in names
     assert "Chiron" not in names
-    assert "MeanNode" not in names
+    assert "MeanNode" in names
     assert "Sun" in names
     assert "Saturn" in names
 

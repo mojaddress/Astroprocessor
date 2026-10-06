@@ -19,7 +19,7 @@ from astro_core.profiles import (
 
 
 def test_save_and_load_profile(tmp_path):
-    """Проверка сохранения и загрузки профиля."""
+    """Проверка сохранения и загрузки профиля с городом."""
     profile = {
         "name": "Тестовый",
         "date": "1990-05-15",
@@ -27,8 +27,9 @@ def test_save_and_load_profile(tmp_path):
         "latitude": 55.7558,
         "longitude": 37.6173,
         "utc_offset_hours": 3,
-        "city": "Москва",
-        "timezone": "Europe/Moscow",
+        "city_name": "Москва",
+        "city_country": "Россия",
+        "city_timezone": "Europe/Moscow",
     }
 
     save_profile(profile, profiles_dir=tmp_path)
@@ -36,8 +37,9 @@ def test_save_and_load_profile(tmp_path):
 
     assert loaded["name"] == "Тестовый"
     assert loaded["date"] == "1990-05-15"
-    assert loaded["city"] == "Москва"
-    assert loaded["timezone"] == "Europe/Moscow"
+    assert loaded["city_name"] == "Москва"
+    assert loaded["city_country"] == "Россия"
+    assert loaded["city_timezone"] == "Europe/Moscow"
 
 
 def test_edit_profile(tmp_path):
@@ -49,6 +51,9 @@ def test_edit_profile(tmp_path):
         "latitude": 55.7558,
         "longitude": 37.6173,
         "utc_offset_hours": 3,
+        "city_name": "Москва",
+        "city_country": "Россия",
+        "city_timezone": "Europe/Moscow",
     }
 
     save_profile(profile, profiles_dir=tmp_path)
@@ -71,6 +76,9 @@ def test_rename_profile(tmp_path):
         "latitude": 55.7558,
         "longitude": 37.6173,
         "utc_offset_hours": 3,
+        "city_name": "Москва",
+        "city_country": "Россия",
+        "city_timezone": "Europe/Moscow",
     }
 
     save_profile(profile, profiles_dir=tmp_path)
@@ -99,6 +107,9 @@ def test_delete_profile(tmp_path):
         "latitude": 55.7558,
         "longitude": 37.6173,
         "utc_offset_hours": 3,
+        "city_name": "Москва",
+        "city_country": "Россия",
+        "city_timezone": "Europe/Moscow",
     }
 
     save_profile(profile, profiles_dir=tmp_path)

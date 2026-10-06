@@ -34,7 +34,7 @@ def calculate_secondary_progressions(birth, progression_date, settings=None):
     Параметры:
         birth: данные рождения (словарь с полями:
                name, date, time, latitude, longitude, utc_offset_hours)
-        progression_date: дата прогрессии (строка "ГГГГ-ММ-ДД")
+        progression_date: дата прогрессии (строка "ГГГГ-ММ-ДД" или datetime.date)
         settings: настройки расчёта
 
     Возвращает:
@@ -50,8 +50,12 @@ def calculate_secondary_progressions(birth, progression_date, settings=None):
     # Парсим только дату рождения (без времени) для вычисления возраста
     birth_date_only = datetime.fromisoformat(birth['date'])
 
-    # Парсим дату прогрессии (без времени)
-    progression_dt = datetime.fromisoformat(progression_date)
+    # Парсим дату прогрессии (поддержка строки и date объекта)
+    if isinstance(progression_date, str):
+        progression_dt = datetime.fromisoformat(progression_date)
+    else:
+        # Assume it's a date/datetime object
+        progression_dt = datetime.combine(progression_date, datetime.min.time())
 
     # Вычисляем возраст в днях (используем только даты, без времени)
     age_days_total = (progression_dt - birth_date_only).days

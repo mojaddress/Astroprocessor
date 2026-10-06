@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800" viewBox="0.00 0.00 800.00 800.00" style="background-color: white; shape-rendering: geometricPrecision; text-rendering: geometricPrecision;">
+<defs>
+  <style type="text/css"><![CDATA[
+    text { font-family: "Segoe UI Symbol", "Segoe UI", "Arial Unicode MS", "DejaVu Sans", Arial, sans-serif; }
+    .sign-text { font-weight: bold; }
+    .planet-text { font-weight: bold; }
+    .aspect-line { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+    .house-line { fill: none; stroke-linecap: round; }
+    .planet-dot { fill-rule: evenodd; }
+  ]]></style>
+</defs>
+  <rect width="800" height="800" fill="white"/>
+  <rect width="800" height="800" fill="white"/>
+  <circle cx="400.00" cy="400.00" r="352.00" fill="none" stroke="#1a1a1a" stroke-width="2.5" opacity="1.0"/>
+  <circle cx="400.00" cy="400.00" r="324.00" fill="none" stroke="#2a2a2a" stroke-width="1.5" opacity="1.0"/>
+  <circle cx="400.00" cy="400.00" r="296.00" fill="none" stroke="#4a4a4a" stroke-width="0.8" stroke-dasharray="6,4" opacity="1.0"/>
+  <circle cx="400.00" cy="400.00" r="236.00" fill="none" stroke="#6a6a6a" stroke-width="0.6" stroke-dasharray="4,3" opacity="1.0"/>
+  <line x1="76.00" y1="400.00" x2="48.00" y2="400.00" stroke="#3a3a3a" stroke-width="1.0" opacity="1.0" class="sign-line"/>
+  <text x="73.52" y="312.52" text-anchor="middle" font-family="Segoe UI Symbol, Segoe UI, Arial, sans-serif" font-size="22" font-weight="bold" fill="#1a1a1a" class="sign-text">♈</text>
+  <line x1="119.41" y1="238.00" x2="95.16" y2="224.00" stroke="#3a3a3a" stroke-width="1.0" opacity="1.0" class="sign-line"/>
+  <text x="161.00" y="161.00" text-anchor="middle" font-family="Segoe UI Symbol, Segoe UI, Arial, sans-serif" font-size="22" font-weight="bold" fill="#1a1a1a" class="sign-text">♉</text>
+  <line x1="238.00" y1="119.41" x2="224.00" y2="95.16" stroke="#3a3a3a" stroke-width="1.0" opacity="1.0" class="sign-line"/>
+  <text x="312.52" y="73.52" text-anchor="middle" font-family="Segoe UI Symbol, Segoe UI, Arial, sans-serif" font-size="22" font-weight="bold" fill="#1a1a1a" class="sign-text">♊</text>
+  <line x1="400.00" y1="76.00" x2="400.00" y2="48.00" stroke="#3a3a3a" stroke-width="1.0" opacity="1.0" class="sign-line"/>
+  <text x="487.48" y="73.52" text-anchor="middle" font-family="Segoe UI Symbol, Segoe UI, Arial, sans-serif" font-size="22" font-weight="bold" fill="#1a1a1a" class="sign-text">♋</text>
+  <line x1="562.00" y1="119.41" x2="576.00" y2="95.16" stroke="#3a3a3a" stroke-width="1.0" opacity="1.0" class="sign-line"/>
+  <text x="639.00" y="161.00" text-anchor="middle" font-family="Segoe UI Symbol, Segoe UI, Arial, sans-serif" font-size="22" font-weight="bold" fill="#1a1a1a" class="sign-text">♌</text>
+  <line x1="680.59" y1="238.00" x2="704.84" y2="224.00" stroke="#3a3a3a" stroke-width="1.0" opacity="1.0" class="sign-line"/>
+  <text x="726.48" y="312.52" text-anchor="middle" font-family="Segoe UI Symbol, Segoe UI, Arial, sans-serif" font-size="22" font-weight="bold" fill="#1a1a1a" class="sign-text">♍</text>
+  <line x1="724.00" y1="400.00" x2="752.00" y2="400.00" stroke="#3a3a3a" stroke-width="1.0" opacity="1.0" class="sign-line"/>
+  <text x="726.48" y="487.48" text-anchor="middle" font-family="Segoe UI Symbol, Segoe UI, Arial, sans-serif" font-size="22" font-weight="bold" fill="#1a1a1a" class="sign-text">♎</text>
+  <line x1="680.59" y1="562.00" x2="704.84" y2="576.00" stroke="#3a3a3a" stroke-width="1.0" opacity="1.0" class="sign-line"/>
+  <text x="639.00" y="639.00" text-anchor="middle" font-family="Segoe UI Symbol, Segoe UI, Arial, sans-serif" font-size="22" font-weight="bold" fill="#1a1a1a" class="sign-text">♏</text>
+  <line x1="562.00" y1="680.59" x2="576.00" y2="704.84" stroke="#3a3a3a" stroke-width="1.0" opacity="1.0" class="sign-line"/>
+  <text x="487.48" y="726.48" text-anchor="middle" font-family="Segoe UI Symbol, Segoe UI, Arial, sans-serif" font-size="22" font-weight="bold" fill="#1a1a1a" class="sign-text">♐</text>
+  <line x1="400.00" y1="724.00" x2="400.00" y2="752.00" stroke="#3a3a3a" stroke-width="1.0" opacity="1.0" class="sign-line"/>
+  <text x="312.52" y="726.48" text-anchor="middle" font-family="Segoe UI Symbol, Segoe UI, Arial, sans-serif" font-size="22" font-weight="bold" fill="#1a1a1a" class="sign-text">♑</text>
+  <line x1="238.00" y1="680.59" x2="224.00" y2="704.84" stroke="#3a3a3a" stroke-width="1.0" opacity="1.0" class="sign-line"/>
+  <text x="161.00" y="639.00" text-anchor="middle" font-family="Segoe UI Symbol, Segoe UI, Arial, sans-serif" font-size="22" font-weight="bold" fill="#1a1a1a" class="sign-text">♒</text>
+  <line x1="119.41" y1="562.00" x2="95.16" y2="576.00" stroke="#3a3a3a" stroke-width="1.0" opacity="1.0" class="sign-line"/>
+  <text x="73.52" y="487.48" text-anchor="middle" font-family="Segoe UI Symbol, Segoe UI, Arial, sans-serif" font-size="22" font-weight="bold" fill="#1a1a1a" class="sign-text">♓</text>
+  <line x1="635.23" y1="380.97" x2="695.04" y2="376.13" 

@@ -24,6 +24,9 @@ REQUIRED_PROFILE_FIELDS = [
     "latitude",
     "longitude",
     "utc_offset_hours",
+    "city_name",
+    "city_country",
+    "city_timezone",
 ]
 
 

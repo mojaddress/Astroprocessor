@@ -16,7 +16,7 @@ class ProgressionPanel(QWidget):
     """Panel for progression calculations."""
     
     # Signals
-    calculate_requested = pyqtSignal(str, date)  # type, date
+    calculate_requested = pyqtSignal(str, object)  # type, date
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -168,20 +168,29 @@ class ProgressionPanel(QWidget):
             "longitude": "Долгота",
             "sign": "Знак",
             "degree": "Градус",
+            "degree_in_sign": "Градус в знаке",
             "house": "Дом",
             "retrograde": "Ретро",
             "speed": "Скорость",
+            "speed_longitude": "Скорость",
             "progressed_planet": "Прогрессивная планета",
             "aspect": "Аспект",
             "natal_point": "Натальная точка",
             "orb": "Орб",
+            "max_orb": "Макс. орб",
             "strength": "Сила",
             "applying": "Сходится",
+            "type": "Тип",
+            "angle": "Угол",
+            "progressed_longitude": "Долгота прогр.",
+            "natal_longitude": "Натальная долг.",
         }
         
         for i, col in enumerate(columns):
             if col in header_map:
                 table.setHorizontalHeaderItem(i, QTableWidgetItem(header_map[col]))
+            else:
+                table.setHorizontalHeaderItem(i, QTableWidgetItem(col))
                 
         table.setRowCount(len(data))
         

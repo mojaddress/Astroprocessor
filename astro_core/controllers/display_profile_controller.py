@@ -18,8 +18,8 @@ from ..display_profiles import (
     ALL_PLANETS,
     ALL_ASPECTS,
     DEFAULT_ORBS,
-    DEFAULT_DISPLAY_PROFILES_DIR,
 )
+from ..paths import get_display_profiles_dir
 
 
 @dataclass
@@ -37,7 +37,7 @@ class DisplayProfileController:
     """Controller for display profile operations."""
 
     def __init__(self, profiles_dir: Optional[str] = None):
-        self._profiles_dir = profiles_dir or DEFAULT_DISPLAY_PROFILES_DIR
+        self._profiles_dir = profiles_dir or str(get_display_profiles_dir())
         self._current_profile_name: str = "full"
         self._current_profile: Optional[DisplayProfile] = None
 

@@ -86,6 +86,10 @@ def _default_appearance():
         "planet_dot_size": 5,
         "planet_colors": {},   # пусто = использовать цвета из chart_svg
         "aspect_colors": {},   # пусто = использовать цвета из chart_svg
+        "show_planet_labels": True,
+        "show_asteroid_labels": True,
+        "show_node_labels": True,
+        "show_angle_labels": True,
     }
 
 
@@ -124,12 +128,12 @@ def get_builtin_profiles():
         {имя: профиль}
     """
     # Классический: традиционные планеты Солнце–Сатурн,
-    # без внешних планет, без Хирона и узлов.
+    # без внешних планет, без Хирона, но с лунными узлами.
     classic_objects = _all_objects_enabled()
     for outer in ("Uranus", "Neptune", "Pluto"):
         classic_objects[outer] = False
     classic_objects["Chiron"] = False
-    classic_objects["LunarNodes"] = False
+    classic_objects["LunarNodes"] = True
 
     # Ведический: Солнце–Сатурн + лунные узлы (Раху/Кету),
     # без внешних планет и Хирона.
@@ -408,4 +412,8 @@ def get_render_kwargs(profile):
         "planet_dot_size": appearance["planet_dot_size"],
         "planet_colors": appearance["planet_colors"],
         "aspect_colors": appearance["aspect_colors"],
+        "show_planet_labels": appearance.get("show_planet_labels", True),
+        "show_asteroid_labels": appearance.get("show_asteroid_labels", True),
+        "show_node_labels": appearance.get("show_node_labels", True),
+        "show_angle_labels": appearance.get("show_angle_labels", True),
     }
