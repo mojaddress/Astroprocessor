@@ -499,6 +499,14 @@ class MainWindow(QMainWindow):
         
         # Restore display profile
         self._current_display_profile_name = state.display_profile_name
+
+        # Синхронизировать выпадающий список профилей отображения
+        # с восстановленным состоянием, чтобы расчёт карты
+        # использовал тот же профиль, что и состояние приложения.
+        if hasattr(self, '_birth_input_panel'):
+            self._birth_input_panel.combo_display_profile.setCurrentText(
+                self._current_display_profile_name
+            )
         
         # Apply display profile to chart view settings
         self._update_chart_view_settings()

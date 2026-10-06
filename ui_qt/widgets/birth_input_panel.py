@@ -409,6 +409,9 @@ class BirthInputPanel(QWidget):
         # Actually we need display profiles from display profile controller
         # For now, add built-in ones
         self.combo_display_profile.addItems(["classic", "vedic", "minimal", "full"])
+        # Профиль по умолчанию — "full" (все объекты),
+        # чтобы на карте отображались все планеты, Хирон и узлы.
+        self.combo_display_profile.setCurrentText("full")
             
     def _on_coord_source_changed(self):
         use_city = self.radio_city.isChecked()

@@ -488,8 +488,10 @@ def render_natal_chart_svg(chart_data, size=DEFAULT_SIZE, show_aspects=True,
         
         if should_show_label:
             planet_label = _get_planet_label(planet_name, label_mode)
-            # Better text color for contrast
-            text_color = "#1a1a1a" if base_color in ("#000000", "#660000", "#8B0000", "#1C1C1C") else "#ffffff"
+            # Текст подписи должен быть видим на белом фоне карты.
+            # Для тёмных точек планет используем чёрный цвет,
+            # для остальных — собственный цвет планеты (как в транзитной карте).
+            text_color = "black" if base_color in ("#000000", "#660000", "#8B0000", "#1C1C1C") else base_color
 
             x_label, y_label = longitude_to_svg_coords(lon, radius + size * 0.04, cx, cy)
             svg_parts.append(_svg_text(
