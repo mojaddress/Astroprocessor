@@ -88,13 +88,15 @@ class ProgressionController:
 
         # Calculate progressions
         if progression_type == "secondary":
-            progressed_planets = calculate_secondary_progressions(
+            progressed_result = calculate_secondary_progressions(
                 birth_data, progression_date, settings_dict
             )
+            progressed_planets = progressed_result.get("planets", [])
         else:
-            progressed_planets = calculate_solar_arc_progressions(
+            progressed_result = calculate_solar_arc_progressions(
                 birth_data, progression_date, settings_dict
             )
+            progressed_planets = progressed_result.get("planets", [])
 
         # Calculate progressed houses and angles (ASC, MC)
         # We use build_natal_chart with the progressed date

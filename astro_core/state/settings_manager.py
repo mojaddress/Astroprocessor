@@ -7,6 +7,11 @@ from typing import Optional, Dict, Any
 from pathlib import Path
 import json
 
+from ..paths import (
+    get_data_dir, get_profiles_dir, get_display_profiles_dir,
+    get_cities_file, get_ephe_dir, get_config_dir
+)
+
 
 @dataclass
 class AppSettings:
@@ -48,10 +53,10 @@ class AppSettings:
     compact_mode: bool = False
     
     # Paths
-    profiles_dir: str = "profiles"
-    display_profiles_dir: str = "config/display_profiles"
-    cities_file: str = "data/cities.json"
-    ephe_dir: str = "ephe"
+    profiles_dir: str = ""
+    display_profiles_dir: str = ""
+    cities_file: str = ""
+    ephe_dir: str = ""
     
     # Advanced
     log_level: str = "INFO"
@@ -63,8 +68,20 @@ class SettingsManager:
     """Manages application settings persistence."""
     
     def __init__(self, settings_file: Optional[Path] = None):
-        self._settings_file = settings_file or Path("config/user_settings.json")
+        if settings_file is None:
+            config_dir = get_config_dir()
+            config_dir.mkdir(parents=True, exist_ok=True)
+            settings_file = config_dir / "user_settings.json"
+        
+        self._settings_file = settings_file
         self._settings = AppSettings()
+        
+        # Initialize default paths
+        self._settings.profiles_dir = str(get_profiles_dir())
+        self._settings.display_profiles_dir = str(get_display_profiles_dir())
+        self._settings.cities_file = str(get_cities_file())
+        self._settings.ephe_dir = str(get_ephe_dir())
+        
         self._load()
     
     @property

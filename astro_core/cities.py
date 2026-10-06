@@ -13,9 +13,10 @@
 import json
 from pathlib import Path
 
+from .paths import get_cities_file
+
 # Путь к файлу базы городов
-# Файл находится в папке data/ в корне проекта
-CITIES_FILE = Path(__file__).parent.parent / "data" / "cities.json"
+CITIES_FILE = get_cities_file()
 
 # Кэш загруженных городов для избежания повторной загрузки
 _cities_cache = None

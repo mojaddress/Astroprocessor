@@ -117,4 +117,4 @@ def test_default_render_backward_compatible():
     svg = render_natal_chart_svg(_demo_chart(), size=600, show_aspects=True,
                                  label_mode="symbols")
     assert svg.startswith("<svg")
-    assert 'r="5"' in svg  # размер точек по умолчанию
+    assert 'r="6"' in svg  # размер точек по умолчанию

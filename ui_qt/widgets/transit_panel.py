@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QGroupBox, QFormLayout,
     QRadioButton, QButtonGroup, QDateEdit, QComboBox, QPushButton,
     QLabel, QTableWidget, QTableWidgetItem, QHeaderView,
-    QAbstractItemView, QMessageBox, QCheckBox
+    QAbstractItemView, QMessageBox, QCheckBox, QLineEdit
 )
 from PyQt6.QtCore import Qt, QDate, pyqtSignal, pyqtSlot
 from datetime import date, timedelta
@@ -20,7 +20,7 @@ class TransitPanel(QWidget):
     """Panel for transit calculations."""
     
     # Signals
-    calculate_requested = pyqtSignal(str, date, date, List[str], List[str])  # mode, start, end, planets, aspects
+    calculate_requested = pyqtSignal(str, object, object, list, list)  # mode, start, end, planets, aspects
     
     def __init__(
         self,
@@ -121,6 +121,9 @@ class TransitPanel(QWidget):
         city_layout.addWidget(self.edit_transit_city_query)
         
         self.combo_transit_city = QComboBox()
+        self.combo_transit_city.setEditable(False)
+        self.combo_transit_city.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.combo_transit_city.setMinimumContentsLength(20)
         city_layout.addWidget(self.combo_transit_city)
         
         self.lbl_transit_city_info = QLabel("")
@@ -198,9 +201,13 @@ class TransitPanel(QWidget):
         self.radio_with_city.toggled.connect(self._on_transit_city_mode_changed)
         self.edit_transit_city_query.textChanged.connect(self._on_transit_city_query_changed)
         self.combo_transit_city.currentIndexChanged.connect(self._on_transit_city_selected)
+        # Connect completer activated signal (if using completer)
         
         self.btn_calculate.clicked.connect(self._on_calculate)
         self.btn_export_json.clicked.connect(self._on_export_json)
+        
+        # Initial population of transit city combo
+        self._populate_initial_transit_cities()
         
     def _on_period_type_changed(self):
         single = self.radio_single_date.isChecked()
@@ -220,6 +227,9 @@ class TransitPanel(QWidget):
         current = self.edit_transit_date.date()
         new_date = current.addDays(days)
         self.edit_transit_date.setDate(new_date)
+        # Auto-recalculate if we have a result already
+        if self.table_results.rowCount() > 0:
+            self._on_calculate()
         
     def _on_transit_city_query_changed(self, text: str):
         if text.strip():
@@ -233,6 +243,17 @@ class TransitPanel(QWidget):
                 self._city_controller.get_city_display_name(c)
             )
             
+    def _populate_initial_transit_cities(self):
+        """Populate transit city combo with initial cities on startup."""
+        cities = self._city_controller.get_all_cities()[:20]
+        self.combo_transit_city.blockSignals(True)
+        self.combo_transit_city.clear()
+        for c in cities:
+            self.combo_transit_city.addItem(
+                self._city_controller.get_city_display_name(c)
+            )
+        self.combo_transit_city.blockSignals(False)
+        
     def _on_transit_city_selected(self, index: int):
         if index < 0:
             self._transit_city = None

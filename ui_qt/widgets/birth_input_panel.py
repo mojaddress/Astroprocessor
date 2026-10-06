@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QFormLayout, QGroupBox,
     QLineEdit, QDateEdit, QTimeEdit, QDoubleSpinBox, QComboBox,
     QRadioButton, QButtonGroup, QPushButton, QLabel, QCheckBox,
-    QCompleter, QStringListModel, QMessageBox
+    QCompleter, QMessageBox, QToolButton
 )
 from PyQt6.QtCore import Qt, QDate, QTime, pyqtSignal, QStringListModel
 from datetime import date, time
@@ -62,6 +62,7 @@ class BirthInputPanel(QWidget):
         
         self._init_ui()
         self._load_profiles()
+        self._load_display_profiles()
         
     def _init_ui(self):
         layout = QVBoxLayout(self)
@@ -135,36 +136,67 @@ class BirthInputPanel(QWidget):
         city_layout.addWidget(self.edit_city_query)
         
         self.combo_city = QComboBox()
+        self.combo_city.setEditable(False)
+        self.combo_city.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.combo_city.setMinimumContentsLength(20)
         city_layout.addWidget(self.combo_city)
         
         self.lbl_city_info = QLabel("")
         city_layout.addWidget(self.lbl_city_info)
         
-        # Manual coordinates
+        # Manual coordinates (collapsible)
+        self.manual_coords_header = QToolButton()
+        self.manual_coords_header.setText("▶ Ручные координаты")
+        self.manual_coords_header.setCheckable(True)
+        self.manual_coords_header.setChecked(False)
+        self.manual_coords_header.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+        self.manual_coords_header.setStyleSheet("QToolButton { text-align: left; font-weight: bold; }")
+        city_layout.addWidget(self.manual_coords_header)
+        
         manual_widget = QWidget()
         manual_layout = QFormLayout(manual_widget)
-        manual_layout.setContentsMargins(0, 0, 0, 0)
+        manual_layout.setContentsMargins(10, 5, 0, 0)
+        
+        # Latitude and Longitude in one row
+        coords_widget = QWidget()
+        coords_layout = QHBoxLayout(coords_widget)
+        coords_layout.setContentsMargins(0, 0, 0, 0)
         
         self.spin_latitude = QDoubleSpinBox()
         self.spin_latitude.setRange(-90, 90)
         self.spin_latitude.setDecimals(4)
         self.spin_latitude.setValue(55.7558)
-        manual_layout.addRow("Широта:", self.spin_latitude)
+        self.spin_latitude.setFixedWidth(100)
+        coords_layout.addWidget(QLabel("Широта:"))
+        coords_layout.addWidget(self.spin_latitude)
+        
+        coords_layout.addSpacing(20)
         
         self.spin_longitude = QDoubleSpinBox()
         self.spin_longitude.setRange(-180, 180)
         self.spin_longitude.setDecimals(4)
         self.spin_longitude.setValue(37.6173)
-        manual_layout.addRow("Долгота:", self.spin_longitude)
+        self.spin_longitude.setFixedWidth(100)
+        coords_layout.addWidget(QLabel("Долгота:"))
+        coords_layout.addWidget(self.spin_longitude)
+        
+        coords_layout.addStretch()
+        manual_layout.addRow("Координаты:", coords_widget)
         
         self.spin_utc_offset = QDoubleSpinBox()
         self.spin_utc_offset.setRange(-12, 14)
         self.spin_utc_offset.setDecimals(1)
         self.spin_utc_offset.setValue(3.0)
         manual_layout.addRow("UTC (ч):", self.spin_utc_offset)
+        self.spin_utc_offset.setValue(3.0)
+        manual_layout.addRow("UTC (ч):", self.spin_utc_offset)
         
+        manual_widget.setVisible(False)
         city_layout.addWidget(manual_widget)
         self.manual_widget = manual_widget
+        
+        # Connect toggle
+        self.manual_coords_header.toggled.connect(self._on_manual_coords_toggled)
         
         layout.addWidget(city_group)
         
@@ -172,6 +204,11 @@ class BirthInputPanel(QWidget):
         self.radio_city.toggled.connect(self._on_coord_source_changed)
         self.combo_city.currentIndexChanged.connect(self._on_city_selected)
         self.edit_city_query.textChanged.connect(self._on_city_query_changed)
+        # Connect completer activated signal to update combo box
+        self.city_completer.activated.connect(self._on_completer_activated)
+        
+        # Initial population of city combo
+        self._populate_initial_cities()
         
         # --- Save Profile Buttons ---
         self.btn_save_profile = QPushButton("💾 Сохранить как профиль")
@@ -197,6 +234,28 @@ class BirthInputPanel(QWidget):
         self.edit_display_profile_name = QLineEdit()
         self.edit_display_profile_name.setPlaceholderText("Имя для сохранения")
         display_layout.addWidget(self.edit_display_profile_name)
+        
+        # Label visibility options
+        label_group = QGroupBox("Подписи на карте")
+        label_layout = QVBoxLayout(label_group)
+        
+        self.chk_show_planet_labels = QCheckBox("Показывать названия планет")
+        self.chk_show_planet_labels.setChecked(True)
+        label_layout.addWidget(self.chk_show_planet_labels)
+        
+        self.chk_show_asteroid_labels = QCheckBox("Показывать названия астероидов (Хирон)")
+        self.chk_show_asteroid_labels.setChecked(True)
+        label_layout.addWidget(self.chk_show_asteroid_labels)
+        
+        self.chk_show_node_labels = QCheckBox("Показывать названия узлов (Раху/Кету)")
+        self.chk_show_node_labels.setChecked(True)
+        label_layout.addWidget(self.chk_show_node_labels)
+        
+        self.chk_show_angle_labels = QCheckBox("Показывать ASC/MC")
+        self.chk_show_angle_labels.setChecked(True)
+        label_layout.addWidget(self.chk_show_angle_labels)
+        
+        display_layout.addWidget(label_group)
         
         dp_btn_layout = QHBoxLayout()
         self.btn_apply_display_profile = QPushButton("📥 Применить")
@@ -288,7 +347,9 @@ class BirthInputPanel(QWidget):
         for widget in [
             self.combo_house_system, self.radio_tropical, self.radio_sidereal,
             self.combo_ayanamsha, self.chk_chiron, self.chk_nodes,
-            self.chk_fortune, self.chk_angles
+            self.chk_fortune, self.chk_angles,
+            self.chk_show_planet_labels, self.chk_show_asteroid_labels,
+            self.chk_show_node_labels, self.chk_show_angle_labels
         ]:
             if hasattr(widget, 'currentIndexChanged'):
                 widget.currentIndexChanged.connect(self.recalc_triggered.emit)
@@ -297,6 +358,43 @@ class BirthInputPanel(QWidget):
             elif hasattr(widget, 'stateChanged'):
                 widget.stateChanged.connect(self.recalc_triggered.emit)
                 
+    def _on_city_query_changed(self, text: str):
+        """Update city completer and combo when query changes."""
+        if text.strip():
+            cities = self._city_controller.search_cities(text, limit=20)
+        else:
+            cities = self._city_controller.get_all_cities()[:20]
+            
+        # Update completer
+        display_names = [self._city_controller.get_city_display_name(c) for c in cities]
+        model = QStringListModel(display_names, self)
+        self.city_completer.setModel(model)
+        
+        # Update combo box
+        self.combo_city.blockSignals(True)
+        self.combo_city.clear()
+        for name in display_names:
+            self.combo_city.addItem(name)
+        self.combo_city.blockSignals(False)
+        
+    def _populate_initial_cities(self):
+        """Populate city combo with initial cities on startup."""
+        cities = self._city_controller.get_all_cities()[:20]
+        display_names = [self._city_controller.get_city_display_name(c) for c in cities]
+        self.combo_city.blockSignals(True)
+        self.combo_city.clear()
+        for name in display_names:
+            self.combo_city.addItem(name)
+        self.combo_city.blockSignals(False)
+        
+    def _on_completer_activated(self, text: str):
+        """Handle completer selection - update combo box."""
+        self.combo_city.blockSignals(True)
+        self.combo_city.setCurrentText(text)
+        self.combo_city.blockSignals(False)
+        # Also trigger city selection logic
+        self._on_city_selected(self.combo_city.currentIndex())
+        
     def _load_profiles(self):
         """Load birth profiles into combo."""
         self.profile_combo.clear()
@@ -304,11 +402,13 @@ class BirthInputPanel(QWidget):
         for p in profiles:
             self.profile_combo.addItem(p.name)
             
-    def _load_display_profiles(self, profiles: List):
+    def _load_display_profiles(self):
         """Load display profiles into combo."""
         self.combo_display_profile.clear()
-        for p in profiles:
-            self.combo_display_profile.addItem(p.name)
+        profiles = self._profile_controller.list_profiles()
+        # Actually we need display profiles from display profile controller
+        # For now, add built-in ones
+        self.combo_display_profile.addItems(["classic", "vedic", "minimal", "full"])
             
     def _on_coord_source_changed(self):
         use_city = self.radio_city.isChecked()
@@ -317,12 +417,13 @@ class BirthInputPanel(QWidget):
         self.manual_widget.setEnabled(not use_city)
         self.lbl_city_info.setVisible(use_city)
         
+    def _on_manual_coords_toggled(self, checked: bool):
+        """Toggle manual coordinates visibility."""
+        self.manual_widget.setVisible(checked)
+        self.manual_coords_header.setText(("▼ " if checked else "▶ ") + "Ручные координаты")
+        
     def _on_zodiac_changed(self):
         self.combo_ayanamsha.setEnabled(self.radio_sidereal.isChecked())
-        
-    def _on_city_query_changed(self, text: str):
-        """Update city completer when query changes."""
-        self.city_completer._update_model(text)
         
     def _on_city_selected(self, index: int):
         if index < 0:
@@ -387,6 +488,12 @@ class BirthInputPanel(QWidget):
         
     def get_birth_data(self) -> dict:
         """Get birth data from form."""
+        # Get city info from combo box
+        city_text = self.combo_city.currentText().strip()
+        city_parts = city_text.split(", ")
+        city_name = city_parts[0] if city_parts else ""
+        city_country = city_parts[1] if len(city_parts) > 1 else ""
+        
         return {
             "name": self.edit_name.text().strip() or "Chart",
             "date": self.edit_birth_date.date().toPyDate().strftime("%Y-%m-%d"),
@@ -394,6 +501,9 @@ class BirthInputPanel(QWidget):
             "latitude": self.spin_latitude.value(),
             "longitude": self.spin_longitude.value(),
             "utc_offset_hours": self.spin_utc_offset.value(),
+            "city_name": city_name,
+            "city_country": city_country,
+            "city_timezone": self.lbl_city_info.text().replace("Часовой пояс: ", "") if "Часовой пояс:" in self.lbl_city_info.text() else "",
         }
         
     def get_settings(self) -> dict:
@@ -411,6 +521,10 @@ class BirthInputPanel(QWidget):
             "include_nodes": self.chk_nodes.isChecked(),
             "include_part_of_fortune": self.chk_fortune.isChecked(),
             "include_angles": self.chk_angles.isChecked(),
+            "show_planet_labels": self.chk_show_planet_labels.isChecked(),
+            "show_asteroid_labels": self.chk_show_asteroid_labels.isChecked(),
+            "show_node_labels": self.chk_show_node_labels.isChecked(),
+            "show_angle_labels": self.chk_show_angle_labels.isChecked(),
             "ephe_path": self.edit_ephe_path.text() or None,
         }
         
@@ -426,6 +540,23 @@ class BirthInputPanel(QWidget):
         self.spin_latitude.setValue(birth_data.get("latitude", 0))
         self.spin_longitude.setValue(birth_data.get("longitude", 0))
         self.spin_utc_offset.setValue(birth_data.get("utc_offset_hours", 0))
+        
+        # Set city if available
+        city_name = birth_data.get("city_name", "")
+        city_country = birth_data.get("city_country", "")
+        city_timezone = birth_data.get("city_timezone", "")
+        if city_name or city_country:
+            display_name = f"{city_name}, {city_country}" if city_country else city_name
+            self.edit_city_query.setText(display_name)
+            # Update city combo
+            self.combo_city.clear()
+            self.combo_city.addItem(display_name)
+            self.combo_city.setCurrentIndex(0)
+            # Update city info label
+            if city_timezone:
+                self.lbl_city_info.setText(f"Часовой пояс: {city_timezone}")
+            else:
+                self.lbl_city_info.setText("")
         
     def set_editing_profile(self, name: str):
         """Set editing mode for a profile."""

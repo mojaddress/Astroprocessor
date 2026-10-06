@@ -7,7 +7,8 @@ from typing import Optional
 from datetime import date, time
 
 from ..chart import build_natal_chart
-from ..display_profiles import apply_profile_to_settings, load_display_profile, list_display_profiles
+from ..chart_svg import render_natal_chart_svg
+from ..display_profiles import apply_profile_to_settings, load_display_profile, list_display_profiles, get_render_kwargs
 from ..constants import DEFAULT_SETTINGS
 
 
@@ -46,28 +47,41 @@ class ChartController:
         self._last_birth = None
         self._last_settings = None
 
-    def calculate_chart(self, birth: BirthData, settings: ChartSettings, display_profile_name: Optional[str] = None) -> dict:
+    def calculate_chart(self, birth, settings, display_profile_name: Optional[str] = None, include_svg: bool = False) -> dict:
         """
         Calculate natal chart with given birth data and settings.
         
         Args:
-            birth: Birth data
-            settings: Chart calculation settings
+            birth: Birth data (BirthData dataclass or dict with name, date, time, latitude, longitude, utc_offset_hours)
+            settings: Chart calculation settings (ChartSettings dataclass or dict)
             display_profile_name: Optional display profile to apply
+            include_svg: Whether to include SVG rendering in result
             
         Returns:
             Chart result dictionary
         """
-        birth_dict = {
-            "name": birth.name,
-            "date": birth.birth_date.strftime("%Y-%m-%d"),
-            "time": birth.birth_time.strftime("%H:%M"),
-            "latitude": birth.latitude,
-            "longitude": birth.longitude,
-            "utc_offset_hours": birth.utc_offset_hours,
-        }
+        # Handle both dict and dataclass for birth
+        if isinstance(birth, BirthData):
+            birth_dict = {
+                "name": birth.name,
+                "date": birth.birth_date.strftime("%Y-%m-%d"),
+                "time": birth.birth_time.strftime("%H:%M"),
+                "latitude": birth.latitude,
+                "longitude": birth.longitude,
+                "utc_offset_hours": birth.utc_offset_hours,
+            }
+        elif isinstance(birth, dict):
+            birth_dict = birth
+        else:
+            raise TypeError("birth must be BirthData dataclass or dict")
 
-        settings_dict = self._settings_to_dict(settings)
+        # Handle both dict and dataclass for settings
+        if isinstance(settings, ChartSettings):
+            settings_dict = self._settings_to_dict(settings)
+        elif isinstance(settings, dict):
+            settings_dict = settings
+        else:
+            raise TypeError("settings must be ChartSettings dataclass or dict")
         
         if display_profile_name:
             try:
@@ -78,11 +92,47 @@ class ChartController:
 
         result = build_natal_chart(birth_dict, settings_dict)
         
+        if include_svg:
+            # Get render kwargs from display profile
+            render_kwargs = {}
+            if display_profile_name:
+                try:
+                    profile = load_display_profile(display_profile_name)
+                    render_kwargs = get_render_kwargs(profile)
+                except FileNotFoundError:
+                    pass
+            # Add label visibility settings from settings_dict
+            render_kwargs.update({
+                "show_planet_labels": settings_dict.get("show_planet_labels", True),
+                "show_asteroid_labels": settings_dict.get("show_asteroid_labels", True),
+                "show_node_labels": settings_dict.get("show_node_labels", True),
+                "show_angle_labels": settings_dict.get("show_angle_labels", True),
+            })
+            result["svg"] = render_natal_chart_svg(result, **render_kwargs)
+        
         self._last_result = result
         self._last_birth = birth_dict
         self._last_settings = settings_dict
         
         return result
+
+    def render_chart_svg(self, chart_result: dict, display_profile_name: Optional[str] = None, settings: Optional[dict] = None) -> str:
+        """Render SVG for a chart result."""
+        render_kwargs = {}
+        if display_profile_name:
+            try:
+                profile = load_display_profile(display_profile_name)
+                render_kwargs = get_render_kwargs(profile)
+            except FileNotFoundError:
+                pass
+        if settings:
+            render_kwargs.update({
+                "show_planet_labels": settings.get("show_planet_labels", True),
+                "show_asteroid_labels": settings.get("show_asteroid_labels", True),
+                "show_node_labels": settings.get("show_node_labels", True),
+                "show_angle_labels": settings.get("show_angle_labels", True),
+            })
+        return render_natal_chart_svg(chart_result, **render_kwargs)
 
     def get_last_result(self) -> Optional[dict]:
         return self._last_result

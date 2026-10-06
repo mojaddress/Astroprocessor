@@ -14,6 +14,7 @@ from ..profiles import (
     delete_profile,
     profile_to_filename,
 )
+from ..paths import get_profiles_dir
 
 
 @dataclass
@@ -25,6 +26,9 @@ class BirthProfile:
     longitude: float
     utc_offset_hours: float
     timezone: str = ""
+    city_name: str = ""
+    city_country: str = ""
+    city_timezone: str = ""
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -33,7 +37,7 @@ class ProfileController:
     """Controller for birth profile operations."""
 
     def __init__(self, profiles_dir: Optional[str] = None):
-        self._profiles_dir = profiles_dir
+        self._profiles_dir = profiles_dir or str(get_profiles_dir())
         self._current_profile: Optional[BirthProfile] = None
         self._editing_profile_name: Optional[str] = None
 
@@ -47,6 +51,9 @@ class ProfileController:
             "longitude": profile.longitude,
             "utc_offset_hours": profile.utc_offset_hours,
             "timezone": profile.timezone,
+            "city_name": profile.city_name,
+            "city_country": profile.city_country,
+            "city_timezone": profile.city_timezone,
         }
         return save_profile(profile_data, self._profiles_dir)
 
@@ -99,6 +106,9 @@ class ProfileController:
             "longitude": profile.longitude,
             "utc_offset_hours": profile.utc_offset_hours,
             "timezone": profile.timezone,
+            "city_name": profile.city_name,
+            "city_country": profile.city_country,
+            "city_timezone": profile.city_timezone,
         }
 
     def _dict_to_profile(self, data: dict) -> BirthProfile:
@@ -114,6 +124,9 @@ class ProfileController:
             longitude=float(data.get("longitude", 0.0)),
             utc_offset_hours=float(data.get("utc_offset_hours", 0.0)),
             timezone=data.get("timezone", ""),
+            city_name=data.get("city_name", ""),
+            city_country=data.get("city_country", ""),
+            city_timezone=data.get("city_timezone", ""),
             created_at=data.get("created_at"),
             updated_at=data.get("updated_at"),
         )

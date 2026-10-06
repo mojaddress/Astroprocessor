@@ -46,7 +46,7 @@ def test_apply_profile_to_settings():
     profile = dp.get_builtin_profile("classic")
     settings = dp.apply_profile_to_settings(profile)
     assert settings["include_chiron"] is False
-    assert settings["include_nodes"] is False
+    assert settings["include_nodes"] is True
     assert "Uranus" not in settings["enabled_planets"]
     assert "Sun" in settings["enabled_planets"]
     assert set(settings["enabled_aspects"]) == set(dp.ALL_ASPECTS)

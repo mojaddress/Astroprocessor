@@ -58,6 +58,9 @@ def test_save_and_load_profile(tmp_path):
         "latitude": 55.7558,
         "longitude": 37.6173,
         "utc_offset_hours": 3,
+        "city_name": "Москва",
+        "city_country": "Россия",
+        "city_timezone": "Europe/Moscow",
     }
 
     file_path = save_profile(profile, profiles_dir=tmp_path)
@@ -71,6 +74,9 @@ def test_save_and_load_profile(tmp_path):
     assert loaded["latitude"] == 55.7558
     assert loaded["longitude"] == 37.6173
     assert loaded["utc_offset_hours"] == 3
+    assert loaded["city_name"] == "Москва"
+    assert loaded["city_country"] == "Россия"
+    assert loaded["city_timezone"] == "Europe/Moscow"
     assert "created_at" in loaded
     assert "updated_at" in loaded
 
@@ -102,6 +108,9 @@ def test_save_profile_updates_timestamps(tmp_path):
         "latitude": 55.7558,
         "longitude": 37.6173,
         "utc_offset_hours": 3,
+        "city_name": "Москва",
+        "city_country": "Россия",
+        "city_timezone": "Europe/Moscow",
     }
 
     # Первое сохранение
@@ -128,6 +137,9 @@ def test_save_profile_preserves_extra_fields(tmp_path):
         "latitude": 55.7558,
         "longitude": 37.6173,
         "utc_offset_hours": 3,
+        "city_name": "Москва",
+        "city_country": "Россия",
+        "city_timezone": "Europe/Moscow",
         "timezone": "Europe/Moscow",
         "notes": "Важный комментарий",
     }
@@ -154,6 +166,9 @@ def test_list_profiles(tmp_path):
             "latitude": 55.7558,
             "longitude": 37.6173,
             "utc_offset_hours": 3,
+            "city_name": "Москва",
+            "city_country": "Россия",
+            "city_timezone": "Europe/Moscow",
         }, profiles_dir=tmp_path)
 
     profiles = list_profiles(profiles_dir=tmp_path)
@@ -186,6 +201,9 @@ def test_list_profiles_skips_corrupted(tmp_path):
         "latitude": 55.7558,
         "longitude": 37.6173,
         "utc_offset_hours": 3,
+        "city_name": "Москва",
+        "city_country": "Россия",
+        "city_timezone": "Europe/Moscow",
     }, profiles_dir=tmp_path)
 
     # Создаём повреждённый файл
@@ -210,6 +228,9 @@ def test_delete_profile(tmp_path):
         "latitude": 55.7558,
         "longitude": 37.6173,
         "utc_offset_hours": 3,
+        "city_name": "Москва",
+        "city_country": "Россия",
+        "city_timezone": "Europe/Moscow",
     }, profiles_dir=tmp_path)
 
     # Первое удаление должно вернуть True

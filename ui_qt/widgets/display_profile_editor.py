@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QComboBox, QLineEdit, QPushButton, QCheckBox, QSpinBox,
     QDoubleSpinBox, QColorDialog, QLabel, QTableWidget,
     QTableWidgetItem, QHeaderView, QAbstractItemView,
-    QTabWidget, QMessageBox, QScrollArea
+    QTabWidget, QMessageBox, QScrollArea, QRadioButton, QButtonGroup
 )
 from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QColor, QPalette

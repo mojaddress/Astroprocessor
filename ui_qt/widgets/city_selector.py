@@ -3,9 +3,9 @@ City Selector - Widget for selecting cities with timezone support.
 """
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLineEdit, QComboBox,
-    QLabel, QCompleter, QStringListModel
+    QLabel, QCompleter
 )
-from PyQt6.QtCore import Qt, pyqtSignal
+from PyQt6.QtCore import Qt, pyqtSignal, QStringListModel
 from typing import Optional
 
 from astro_core.controllers import CityController

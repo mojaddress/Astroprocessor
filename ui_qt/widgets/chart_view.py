@@ -1,12 +1,13 @@
 """
 Chart View - SVG rendering with QGraphicsView for interactive charts.
 Supports zoom (mouse wheel), pan (drag), and reset.
+Uses QSvgRenderer + QGraphicsPixmapItem with proper text rendering.
 """
-from PyQt6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsSvgItem
+from PyQt6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
 from PyQt6.QtSvg import QSvgRenderer
-from PyQt6.QtCore import Qt, QRectF, QPointF, pyqtSignal
-from PyQt6.QtGui import QWheelEvent, QMouseEvent, QKeyEvent
-import io
+from PyQt6.QtCore import Qt, QRectF, QPointF, pyqtSignal, QByteArray
+from PyQt6.QtGui import QWheelEvent, QMouseEvent, QKeyEvent, QPixmap, QPainter
+from typing import List, Dict, Optional
 
 
 class ChartView(QGraphicsView):
@@ -20,12 +21,19 @@ class ChartView(QGraphicsView):
         self._scene = QGraphicsScene(self)
         self.setScene(self._scene)
         
-        # SVG item
-        self._svg_item = None
+        # Pixmap item for rendered SVG
+        self._pixmap_item = None
         self._renderer = None
+        self._svg_content = ""
+        
+        # Transit data
+        self._transit_planets: List[Dict] = []
+        self._transit_aspects: List[Dict] = []
+        self._show_transits = True
         
         # View settings
-        self.setRenderHint(self.renderHints() | 0x01)  # Antialiasing
+        self.setRenderHint(QPainter.RenderHint.Antialiasing)
+        self.setRenderHint(QPainter.RenderHint.TextAntialiasing)
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
@@ -38,20 +46,25 @@ class ChartView(QGraphicsView):
         self._max_zoom = 10.0
         
     def set_svg(self, svg_content: str):
-        """Set SVG content to display."""
+        """Set SVG content to display by rendering to pixmap with proper text rendering."""
         self._scene.clear()
+        self._svg_content = svg_content
         
         # Create renderer from SVG string
         svg_bytes = svg_content.encode('utf-8')
-        self._renderer = QSvgRenderer(svg_bytes)
+        self._renderer = QSvgRenderer(QByteArray(svg_bytes))
         
         if not self._renderer.isValid():
             return
             
-        # Create SVG item
-        self._svg_item = QGraphicsSvgItem()
-        self._svg_item.setSharedRenderer(self._renderer)
-        self._scene.addItem(self._svg_item)
+        # Render SVG to pixmap with proper text rendering
+        pixmap = self._render_svg_to_pixmap()
+        if pixmap.isNull():
+            return
+            
+        # Create pixmap item
+        self._pixmap_item = QGraphicsPixmapItem(pixmap)
+        self._scene.addItem(self._pixmap_item)
         
         # Set scene rect to SVG bounds
         self._scene.setSceneRect(self._renderer.viewBoxF())
@@ -60,9 +73,47 @@ class ChartView(QGraphicsView):
         self.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
         self._zoom_factor = 1.0
         
+    def _render_svg_to_pixmap(self) -> QPixmap:
+        """Render SVG to pixmap using QSvgRenderer with proper text rendering."""
+        # Get SVG size from renderer
+        view_box = self._renderer.viewBoxF()
+        if view_box.isEmpty():
+            return QPixmap()
+            
+        # Create pixmap with the SVG's intrinsic size
+        size = view_box.size().toSize()
+        # Ensure minimum size
+        if size.width() < 100:
+            size.setWidth(800)
+        if size.height() < 100:
+            size.setHeight(800)
+            
+        pixmap = QPixmap(size)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        
+        # Render SVG to pixmap with text antialiasing
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+        self._renderer.render(painter)
+        painter.end()
+        
+        return pixmap
+        
     def get_svg_item(self):
-        """Get the SVG graphics item."""
-        return self._svg_item
+        """Get the SVG graphics item (returns pixmap item)."""
+        return self._pixmap_item
+    
+    def set_transit_data(self, transit_planets: List[Dict], transit_aspects: List[Dict]):
+        """Set transit data for display."""
+        self._transit_planets = transit_planets or []
+        self._transit_aspects = transit_aspects or []
+    
+    def set_show_transits(self, show: bool):
+        """Toggle transit display."""
+        self._show_transits = show
+        # Note: Actual transit display requires re-rendering SVG with/without transits
+        # This is handled by MainWindow which re-renders the chart
     
     def wheelEvent(self, event: QWheelEvent):
         """Handle mouse wheel for zooming."""
@@ -93,7 +144,7 @@ class ChartView(QGraphicsView):
             
     def reset_view(self):
         """Reset view to fit SVG."""
-        if self._svg_item:
+        if self._pixmap_item:
             self.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
             self._zoom_factor = 1.0
             
@@ -128,15 +179,18 @@ class ChartView(QGraphicsView):
             
     def save_svg(self, file_path: str) -> bool:
         """Save current SVG to file."""
-        if self._renderer and self._svg_item:
-            # We need to save the original SVG content
-            # The renderer doesn't provide direct save, so we'd need to store the original
-            return False
+        if self._svg_content:
+            try:
+                with open(file_path, 'w', encoding='utf-8') as f:
+                    f.write(self._svg_content)
+                return True
+            except Exception:
+                return False
         return False
         
     def render_to_image(self, width: int, height: int):
         """Render current view to QImage."""
-        from PyQt6.QtGui import QImage, QPainter
+        from PyQt6.QtGui import QImage
         image = QImage(width, height, QImage.Format.Format_ARGB32)
         image.fill(Qt.GlobalColor.white)
         painter = QPainter(image)
