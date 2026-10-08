@@ -18,6 +18,31 @@
 
 ---
 
+2026-10-09 — Итерация 16: Векторная карта — закрыты дефекты глифов и качества рендера
+Уровень автономии: 🟢 (владелец применил код и патчи; тесты прошли)
+Сделано:
+
+- Установлена первопричина I-1 (пропадание глифов ☉☽☿☊⚷): Qt не находил глифы в шрифтовом fallback.
+- Установлена первопричина I-2 («грубый карандаш»): растровый конвейер SVG → QPixmap → масштабирование.
+- Новый модуль `ui_qt/widgets/astro_glyphs.py`: 13 векторных глифов (QPainterPath), независимых от шрифтов ОС.
+- `ui_qt/widgets/chart_view.py` переписан: полностью векторная QGraphicsScene; QPixmap и QSvgRenderer исключены из пути отображения.
+- `ui_qt/main_window.py`: `_update_chart_view` и `_update_transit_chart_view` переведены на `set_chart_data` / `set_transit_chart_data`; добавлен `_get_display_settings`; восстановлен `_update_chart_view_settings`.
+- Промежуточный `ui_qt/widgets/chart_painter.py` удалён.
+- Добавлен регрессионный тест `tests/test_chart_view_vector.py` (5 тестов).
+  Изменено (файлы, модули, схема данных, поведение):
+- Файлы: `astro_glyphs.py` (новый), `chart_view.py` (переписан), `main_window.py` (блоки A/B), `chart_painter.py` (удалён), `test_chart_view_vector.py` (новый).
+- Поведение: экранный рендер — векторная сцена; `chart_svg.py` теперь отвечает только за экспорт SVG в файл.
+  Решения и почему: D-16 — векторные глифы (гарантия отображения на любой ОС); D-17 — QGraphicsScene (качество на любом DPI/зуме, отсутствие font-fallback-рисков).
+  Сверх запроса (+1): диагностический баннер в `ChartView.set_svg` — принято (локализует регрессии за 1 сек).
+  Гипотезы: новая H-12 «векторная сцена даёт бесплатный экспорт PNG в любом разрешении» — ждёт проверки в итерации 17.
+  Проверено:
+  В среде агента: `py -3.11 -m pytest tests -q` → 131 passed, 1 warning (не наш код, PyQt6 internal).
+  Нужно проверить владельцу: визуально — зум Ctrl+колесо остаётся гладким; транзиты — символы на обоих кольцах.
+  Проблемы: I-1 закрыта, I-2 закрыта; новые некритичные I-3 (нет заголовка транзитной карты), I-4 (наложение подписей в стеллиуме).
+  Изменения в матрице превосходства: качество UI ↑ до уровня коммерческих аналогов (векторная графика), надёжность отображения ↑ (независимость от шрифтов ОС).
+  Артефакты: `chart_check.png`, скриншоты натальной и транзитной карт от 2026-10-09, `tests/test_chart_view_vector.py`.
+  Следующий шаг: итерация 17 (заголовок транзитов I-3, anti-collision подписей I-4, экспорт PNG H-12, обновление PROJECT_MAP.md).
+
 ## Stage 01 — Natal Chart Core (версия 0.2.0, модульная)
 
 **Статус:** завершён.
@@ -777,7 +802,7 @@
    - Точка входа: `ui_qt/app_qt.py`
    - Data files: `ephe/`, `data/cities.json`, `config/default_settings.json`
    - Hidden imports: pyswisseph, zoneinfo, tzdata, все модули astro_core, ui_qt
-   - Исключения: tests, ui_streamlit, streamlit, pandas, numpy, matplotlib, jupyter, pytest, .git, *.md, *.bat, run.py, app.py, app_legacy.py
+   - Исключения: tests, ui*streamlit, streamlit, pandas, numpy, matplotlib, jupyter, pytest, .git, *.md, \_.bat, run.py, app.py, app_legacy.py
    - UPX сжатие, console=False (GUI режим)
    - Размер .exe: ~37 MB
 
@@ -827,19 +852,19 @@
    - `chart_svg.py` — параметр `include_svg` в `render_chart_svg`, улучшенная логика цветов
    - Города: обработка кириллицы, улучшен поиск
 
-2. **Тестирование:**
+3. **Тестирование:**
    - Все 126 тестов проходят
    - Добавлены тесты для профилей отображения, транзитов с профилями, SVG с профилями
 
-3. **Очистка:**
-   - Удалены старые demo- и test-файлы (*.json, check_*.py)
+4. **Очистка:**
+   - Удалены старые demo- и test-файлы (\_.json, check\_\_.py)
    - Удалены устаревшие скрипты проверки
 
 ### Изменённые файлы
 
 - `astro_core/chart_svg.py` — цвет подписей, include_svg
 - `ui_qt/widgets/birth_input_panel.py` — дефолт профиля
-- `ui_qt/main_window.py` — синхронизация combo, _update_transit_chart_view
+- `ui_qt/main_window.py` — синхронизация combo, \_update_transit_chart_view
 - `astro_core/paths.py` — новый модуль
 - `astro_core/controllers/*.py` — мелкие исправления
 - `tests/` — обновлённые/новые тесты

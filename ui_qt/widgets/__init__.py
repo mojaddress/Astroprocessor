@@ -1,6 +1,7 @@
 """
 Widgets package - PyQt6 UI components.
 """
+
 from .chart_view import ChartView
 from .birth_input_panel import BirthInputPanel
 from .transit_panel import TransitPanel
