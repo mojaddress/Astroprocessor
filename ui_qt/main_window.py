@@ -196,31 +196,18 @@ class MainWindow(QMainWindow):
             transit_planets = self._extract_transit_planets_for_chart(transit_result, start_date, end_date)
             transit_aspects = self._extract_transit_aspects_for_chart(transit_result)
             
-            # Render transit chart
-            from astro_core.chart_svg import render_transit_chart_svg
-            from astro_core.display_profiles import get_render_kwargs, load_display_profile
-            
-            render_kwargs = {}
-            if self._current_display_profile_name:
-                try:
-                    profile = load_display_profile(self._current_display_profile_name)
-                    render_kwargs = get_render_kwargs(profile)
-                except FileNotFoundError:
-                    pass
-            
-            svg = render_transit_chart_svg(
-                natal_chart=self._current_chart_result,
-                transit_planets=transit_planets,
-                transit_aspects=transit_aspects,
-                **render_kwargs
-            )
-            
-            # Update chart view with transit chart
-            self._chart_view.set_svg(svg)
-            self._chart_view.set_transit_data(transit_planets, transit_aspects)
+        # Render transit chart using new ChartPainter
+        display_settings = self._get_display_settings()
+        self._chart_view.set_transit_chart_data(
+            natal_chart=self._current_chart_result,
+            transit_planets=transit_planets,
+            transit_aspects=transit_aspects,
+            display_settings=display_settings
+        )
+        self._chart_view.set_transit_data(transit_planets, transit_aspects)
             
         except Exception as e:
-            self._status_label.setText(f"Ошибка отображения транзитов: {str(e)}")
+        self._status_label.setText(f"Ошибка отображения транзитов: {str(e)}")
     
     def _extract_transit_planets_for_chart(self, transit_result, start_date, end_date):
         """Extract transit planets for chart rendering."""
@@ -510,6 +497,28 @@ class MainWindow(QMainWindow):
         
         # Apply display profile to chart view settings
         self._update_chart_view_settings()
+
+    def _get_display_settings(self) -> dict:
+        """Получает текущие настройки отображения."""
+        try:
+            from astro_core.display_profiles import load_display_profile, get_render_kwargs
+            
+            if self._current_display_profile_name:
+                profile = load_display_profile(self._current_display_profile_name)
+                return get_render_kwargs(profile)
+        except Exception:
+            pass
+        
+        # Настройки по умолчанию
+        return {
+            "show_planet_labels": True,
+            "show_asteroid_labels": True,
+            "show_node_labels": True,
+            "show_angle_labels": True,
+            "show_houses": True,
+            "show_aspects": True,
+            "label_mode": "symbols",
+        }
         
     def _save_state(self):
         """Save application state."""
@@ -521,37 +530,56 @@ class MainWindow(QMainWindow):
         self._state_manager.mark_dirty()
         self._state_manager.save()
         
-    def _update_chart_view(self):
+        def _update_chart_view(self):
         """Update the chart view with current chart result."""
         if self._current_chart_result:
             try:
-                # Get SVG from chart result
+                # Получаем настройки отображения
+                display_settings = self._get_display_settings()
+                
+                # Используем новый метод отрисовки
+                self._chart_view.set_chart_data(
+                    self._current_chart_result,
+                    display_settings
+                )
+                
+                # Сохраняем SVG для экспорта (если есть)
                 svg_content = self._current_chart_result.get("svg", "")
                 if svg_content:
                     self._chart_view.set_svg(svg_content)
-                    
-                # Update chart type label
+                
+                # Обновляем статус
                 chart_type = self._current_chart_result.get("chart_type", "Натальная карта")
                 self._status_label.setText(f"{chart_type} - {self._current_birth_data.get('name', 'Chart') if self._current_birth_data else ''}")
-                
             except Exception as e:
                 self._status_label.setText(f"Ошибка отображения карты: {str(e)}")
         else:
-            # Clear chart view and show placeholder
+            # Очищаем вид
             self._chart_view._scene.clear()
             self._chart_view._scene.addText("Введите данные и нажмите 'Рассчитать карту'")
             self._status_label.setText("Готово")
-            
-    def _update_chart_view_settings(self):
-        """Update chart view settings based on current display profile."""
+    
+    def _get_display_settings(self) -> Dict:
+        """Получает текущие настройки отображения."""
         try:
-            # Get appearance settings from current display profile
-            appearance = self._display_profile_controller.get_appearance_settings()
-            if appearance:
-                # Apply settings to chart view (if needed)
-                pass  # Chart view gets SVG from result, so appearance is applied during calculation
+            from astro_core.display_profiles import load_display_profile, get_render_kwargs
+            
+            if self._current_display_profile_name:
+                profile = load_display_profile(self._current_display_profile_name)
+                return get_render_kwargs(profile)
         except Exception:
-            pass  # Use defaults
+            pass
+        
+        # Настройки по умолчанию
+        return {
+            "show_planet_labels": True,
+            "show_asteroid_labels": True,
+            "show_node_labels": True,
+            "show_angle_labels": True,
+            "show_houses": True,
+            "show_aspects": True,
+            "label_mode": "symbols",
+        }
             
     def _set_left_panel_visible(self, visible: bool):
         """Show or hide left panel."""
