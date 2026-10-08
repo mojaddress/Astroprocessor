@@ -160,25 +160,15 @@ class MainWindow(QMainWindow):
         """Calculate and display transit chart overlay on natal chart."""
         if not self._current_chart_result:
             return
-            
         try:
             self._current_transit_mode = mode
-            
-            # Get transit data for current date/range
-            if mode == "calendar":
-                # For calendar mode, use the transit date
+            if mode in ("calendar", "precise"):
                 transit_date = self._transit_panel.edit_transit_date.date().toPyDate()
-                start_date = transit_date
-                end_date = transit_date
-            elif mode == "precise":
-                transit_date = self._transit_panel.edit_transit_date.date().toPyDate()
-                start_date = transit_date
-                end_date = transit_date
-            else:  # periods
+                start_date = end_date = transit_date
+            else:
                 start_date = self._transit_panel.edit_start_date.date().toPyDate()
                 end_date = self._transit_panel.edit_end_date.date().toPyDate()
-            
-            # Calculate transits for chart
+
             transit_result = self._transit_controller.calculate_transits(
                 natal_objects=self._current_chart_result.get("objects", []),
                 start_date=start_date.strftime("%Y-%m-%d"),
@@ -189,26 +179,26 @@ class MainWindow(QMainWindow):
                 filter_aspects=None,
                 display_profile_name=self._current_display_profile_name
             )
-            
             self._current_transit_result = transit_result
-            
-            # Get transit planets and aspects for chart rendering
-            transit_planets = self._extract_transit_planets_for_chart(transit_result, start_date, end_date)
+
+            transit_planets = self._extract_transit_planets_for_chart(
+                transit_result, start_date, end_date)
             transit_aspects = self._extract_transit_aspects_for_chart(transit_result)
-            
-        # Render transit chart using new ChartPainter
-        display_settings = self._get_display_settings()
-        self._chart_view.set_transit_chart_data(
-            natal_chart=self._current_chart_result,
-            transit_planets=transit_planets,
-            transit_aspects=transit_aspects,
-            display_settings=display_settings
-        )
-        self._chart_view.set_transit_data(transit_planets, transit_aspects)
-            
+
+            display_settings = self._get_display_settings()
+            self._chart_view.set_transit_chart_data(
+                natal_chart=self._current_chart_result,
+                transit_planets=transit_planets,
+                transit_aspects=transit_aspects,
+                display_settings=display_settings
+            )
+            svg_content = self._current_chart_result.get("svg", "")
+            if svg_content:
+                self._chart_view.set_svg(svg_content)
+            self._chart_view.set_transit_data(transit_planets, transit_aspects)
         except Exception as e:
-        self._status_label.setText(f"Ошибка отображения транзитов: {str(e)}")
-    
+            self._status_label.setText(f"Ошибка отображения транзитов: {str(e)}")
+
     def _extract_transit_planets_for_chart(self, transit_result, start_date, end_date):
         """Extract transit planets for chart rendering."""
         # For chart rendering, we need current positions of transit planets
@@ -530,57 +520,56 @@ class MainWindow(QMainWindow):
         self._state_manager.mark_dirty()
         self._state_manager.save()
         
-        def _update_chart_view(self):
+    def _update_chart_view(self):
         """Update the chart view with current chart result."""
         if self._current_chart_result:
             try:
-                # Получаем настройки отображения
                 display_settings = self._get_display_settings()
-                
-                # Используем новый метод отрисовки
                 self._chart_view.set_chart_data(
                     self._current_chart_result,
                     display_settings
                 )
-                
-                # Сохраняем SVG для экспорта (если есть)
                 svg_content = self._current_chart_result.get("svg", "")
                 if svg_content:
                     self._chart_view.set_svg(svg_content)
-                
-                # Обновляем статус
                 chart_type = self._current_chart_result.get("chart_type", "Натальная карта")
-                self._status_label.setText(f"{chart_type} - {self._current_birth_data.get('name', 'Chart') if self._current_birth_data else ''}")
+                name = self._current_birth_data.get("name", "Chart") if self._current_birth_data else ""
+                self._status_label.setText(f"{chart_type} - {name}")
             except Exception as e:
                 self._status_label.setText(f"Ошибка отображения карты: {str(e)}")
         else:
-            # Очищаем вид
             self._chart_view._scene.clear()
             self._chart_view._scene.addText("Введите данные и нажмите 'Рассчитать карту'")
             self._status_label.setText("Готово")
-    
-    def _get_display_settings(self) -> Dict:
-        """Получает текущие настройки отображения."""
+
+    def _get_display_settings(self) -> dict:
+        """Текущие настройки отображения из профиля отображения."""
         try:
             from astro_core.display_profiles import load_display_profile, get_render_kwargs
-            
             if self._current_display_profile_name:
                 profile = load_display_profile(self._current_display_profile_name)
                 return get_render_kwargs(profile)
         except Exception:
             pass
-        
-        # Настройки по умолчанию
         return {
-            "show_planet_labels": True,
-            "show_asteroid_labels": True,
-            "show_node_labels": True,
-            "show_angle_labels": True,
-            "show_houses": True,
-            "show_aspects": True,
-            "label_mode": "symbols",
+            "show_planet_labels": True, "show_asteroid_labels": True,
+            "show_node_labels": True, "show_angle_labels": True,
+            "show_houses": True, "show_aspects": True, "label_mode": "symbols",
         }
             
+    def _update_chart_view_settings(self):
+        """Применяет профиль отображения к карте.
+
+        Новая архитектура: внешний вид передаётся виджету при рендеринге
+        через _get_display_settings(), поэтому здесь достаточно
+        перерисовать текущую карту, если она уже рассчитана.
+        """
+        try:
+            if self._current_chart_result:
+                self._update_chart_view()
+        except Exception:
+            pass
+
     def _set_left_panel_visible(self, visible: bool):
         """Show or hide left panel."""
         if hasattr(self, '_main_splitter'):
