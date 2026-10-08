@@ -1,173 +1,199 @@
 """
-Chart View - SVG rendering with QGraphicsView for interactive charts.
-Supports zoom (mouse wheel), pan (drag), and reset.
-Uses QSvgRenderer + QGraphicsPixmapItem with proper text rendering.
+Chart View - интерактивный виджет для отображения астрологических карт.
+
+Использует ChartPainter для прямой отрисовки через QPainter.
+Поддерживает:
+- Зум (колесо мыши + Ctrl)
+- Панорамирование (перетаскивание)
+- Сброс вида
 """
+
 from PyQt6.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
-from PyQt6.QtSvg import QSvgRenderer
-from PyQt6.QtCore import Qt, QRectF, QPointF, pyqtSignal, QByteArray
+from PyQt6.QtCore import Qt, QPointF, pyqtSignal
 from PyQt6.QtGui import QWheelEvent, QMouseEvent, QKeyEvent, QPixmap, QPainter
 from typing import List, Dict, Optional
 
+from .chart_painter import ChartPainter
+
 
 class ChartView(QGraphicsView):
-    """Interactive chart view with zoom and pan support."""
+    """Интерактивный виджет для отображения карт."""
     
-    # Signals
-    chart_clicked = pyqtSignal(QPointF)  # Scene coordinates
+    # Сигналы
+    chart_clicked = pyqtSignal(QPointF)
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        
         self._scene = QGraphicsScene(self)
         self.setScene(self._scene)
         
-        # Pixmap item for rendered SVG
-        self._pixmap_item = None
-        self._renderer = None
-        self._svg_content = ""
+        # Отрисовщик
+        self._painter = ChartPainter(size=800)
         
-        # Transit data
+        # Текущие данные
+        self._chart_data: Optional[Dict] = None
+        self._pixmap_item: Optional[QGraphicsPixmapItem] = None
+        self._svg_content = ""  # Для обратной совместимости
+        
+        # Транзиты
         self._transit_planets: List[Dict] = []
         self._transit_aspects: List[Dict] = []
         self._show_transits = True
+        self._is_transit_mode = False
         
-        # View settings
+        # Настройки отображения
         self.setRenderHint(QPainter.RenderHint.Antialiasing)
         self.setRenderHint(QPainter.RenderHint.TextAntialiasing)
+        self.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         self.setDragMode(QGraphicsView.DragMode.ScrollHandDrag)
         self.setTransformationAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         
-        # State
+        # Состояние зума
         self._zoom_factor = 1.0
         self._min_zoom = 0.1
         self._max_zoom = 10.0
-        
+    
     def set_svg(self, svg_content: str):
-        """Set SVG content to display by rendering to pixmap with proper text rendering."""
-        self._scene.clear()
+        """Устанавливает SVG контент (для обратной совместимости)."""
         self._svg_content = svg_content
+        # Теперь используем ChartPainter, но сохраняем SVG для экспорта
+    
+    def set_chart_data(self, chart_data: Dict, display_settings: Optional[Dict] = None):
+        """Устанавливает данные натальной карты для отрисовки."""
+        self._chart_data = chart_data
+        self._is_transit_mode = False
         
-        # Create renderer from SVG string
-        svg_bytes = svg_content.encode('utf-8')
-        self._renderer = QSvgRenderer(QByteArray(svg_bytes))
+        if display_settings:
+            self._apply_display_settings(display_settings)
         
-        if not self._renderer.isValid():
+        self._render_chart()
+    
+    def set_transit_chart_data(self, natal_chart: Dict, transit_planets: List[Dict],
+                                transit_aspects: List[Dict], display_settings: Optional[Dict] = None):
+        """Устанавливает данные транзитной карты."""
+        self._chart_data = natal_chart
+        self._transit_planets = transit_planets
+        self._transit_aspects = transit_aspects
+        self._is_transit_mode = True
+        
+        if display_settings:
+            self._apply_display_settings(display_settings)
+        
+        self._render_chart()
+    
+    def _apply_display_settings(self, settings: Dict):
+        """Применяет настройки отображения."""
+        self._painter.show_planet_labels = settings.get("show_planet_labels", True)
+        self._painter.show_asteroid_labels = settings.get("show_asteroid_labels", True)
+        self._painter.show_node_labels = settings.get("show_node_labels", True)
+        self._painter.show_angle_labels = settings.get("show_angle_labels", True)
+        self._painter.show_houses = settings.get("show_houses", True)
+        self._painter.show_aspects = settings.get("show_aspects", True)
+        self._painter.label_mode = settings.get("label_mode", "symbols")
+    
+    def _render_chart(self):
+        """Отрисовывает карту в сцену."""
+        if not self._chart_data:
             return
-            
-        # Render SVG to pixmap with proper text rendering
-        pixmap = self._render_svg_to_pixmap()
+        
+        # Получаем devicePixelRatio для HiDPI
+        device_pixel_ratio = self.devicePixelRatioF()
+        if device_pixel_ratio <= 0:
+            device_pixel_ratio = 1.0
+        
+        # Отрисовываем
+        if self._is_transit_mode:
+            pixmap = self._painter.render_transit_to_pixmap(
+                self._chart_data,
+                self._transit_planets,
+                self._transit_aspects,
+                device_pixel_ratio
+            )
+        else:
+            pixmap = self._painter.render_to_pixmap(
+                self._chart_data,
+                device_pixel_ratio
+            )
+        
         if pixmap.isNull():
             return
-            
-        # Create pixmap item
+        
+        # Очищаем сцену и добавляем новый pixmap
+        self._scene.clear()
         self._pixmap_item = QGraphicsPixmapItem(pixmap)
         self._scene.addItem(self._pixmap_item)
         
-        # Set scene rect to SVG bounds
-        self._scene.setSceneRect(self._renderer.viewBoxF())
+        # Устанавливаем размер сцены
+        self._scene.setSceneRect(0, 0, self._painter.size, self._painter.size)
         
-        # Fit to view initially
+        # Подгоняем вид
         self.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
         self._zoom_factor = 1.0
-        
-    def _render_svg_to_pixmap(self) -> QPixmap:
-        """Render SVG to pixmap using QSvgRenderer with proper text rendering."""
-        # Get SVG size from renderer
-        view_box = self._renderer.viewBoxF()
-        if view_box.isEmpty():
-            return QPixmap()
-            
-        # Create pixmap with the SVG's intrinsic size
-        size = view_box.size().toSize()
-        # Ensure minimum size
-        if size.width() < 100:
-            size.setWidth(800)
-        if size.height() < 100:
-            size.setHeight(800)
-            
-        pixmap = QPixmap(size)
-        pixmap.fill(Qt.GlobalColor.transparent)
-        
-        # Render SVG to pixmap with text antialiasing
-        painter = QPainter(pixmap)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
-        self._renderer.render(painter)
-        painter.end()
-        
-        return pixmap
-        
-    def get_svg_item(self):
-        """Get the SVG graphics item (returns pixmap item)."""
-        return self._pixmap_item
     
     def set_transit_data(self, transit_planets: List[Dict], transit_aspects: List[Dict]):
-        """Set transit data for display."""
+        """Устанавливает данные транзитов (для обратной совместимости)."""
         self._transit_planets = transit_planets or []
         self._transit_aspects = transit_aspects or []
     
     def set_show_transits(self, show: bool):
-        """Toggle transit display."""
+        """Включает/выключает отображение транзитов."""
         self._show_transits = show
-        # Note: Actual transit display requires re-rendering SVG with/without transits
-        # This is handled by MainWindow which re-renders the chart
     
     def wheelEvent(self, event: QWheelEvent):
-        """Handle mouse wheel for zooming."""
+        """Обработка колеса мыши для зума."""
         if event.modifiers() & Qt.KeyboardModifier.ControlModifier:
-            # Zoom with Ctrl+wheel
             delta = event.angleDelta().y()
             if delta > 0:
                 self.zoom_in()
             else:
                 self.zoom_out()
         else:
-            # Normal scroll
             super().wheelEvent(event)
-            
+    
     def zoom_in(self, factor: float = 1.2):
-        """Zoom in by factor."""
+        """Увеличить масштаб."""
         new_zoom = self._zoom_factor * factor
         if new_zoom <= self._max_zoom:
             self.scale(factor, factor)
             self._zoom_factor = new_zoom
-            
+    
     def zoom_out(self, factor: float = 1.2):
-        """Zoom out by factor."""
+        """Уменьшить масштаб."""
         new_zoom = self._zoom_factor / factor
         if new_zoom >= self._min_zoom:
             self.scale(1.0 / factor, 1.0 / factor)
             self._zoom_factor = new_zoom
-            
+    
     def reset_view(self):
-        """Reset view to fit SVG."""
+        """Сбросить вид."""
         if self._pixmap_item:
             self.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
             self._zoom_factor = 1.0
-            
+    
     def set_zoom(self, zoom: float):
-        """Set absolute zoom level."""
+        """Установить абсолютный масштаб."""
         zoom = max(self._min_zoom, min(self._max_zoom, zoom))
         factor = zoom / self._zoom_factor
         self.scale(factor, factor)
         self._zoom_factor = zoom
-        
+    
     def get_zoom(self) -> float:
-        """Get current zoom level."""
+        """Получить текущий масштаб."""
         return self._zoom_factor
-        
+    
     def mousePressEvent(self, event: QMouseEvent):
-        """Handle mouse press for click detection."""
+        """Обработка клика мыши."""
         if event.button() == Qt.MouseButton.LeftButton:
             scene_pos = self.mapToScene(event.pos())
             self.chart_clicked.emit(scene_pos)
         super().mousePressEvent(event)
-        
+    
     def keyPressEvent(self, event: QKeyEvent):
-        """Handle keyboard shortcuts."""
+        """Обработка клавиш."""
         if event.key() == Qt.Key.Key_0:
             self.reset_view()
         elif event.key() == Qt.Key.Key_Plus or event.key() == Qt.Key.Key_Equal:
@@ -176,9 +202,9 @@ class ChartView(QGraphicsView):
             self.zoom_out()
         else:
             super().keyPressEvent(event)
-            
+    
     def save_svg(self, file_path: str) -> bool:
-        """Save current SVG to file."""
+        """Сохраняет SVG в файл (для обратной совместимости)."""
         if self._svg_content:
             try:
                 with open(file_path, 'w', encoding='utf-8') as f:
@@ -187,9 +213,9 @@ class ChartView(QGraphicsView):
             except Exception:
                 return False
         return False
-        
+    
     def render_to_image(self, width: int, height: int):
-        """Render current view to QImage."""
+        """Отрисовывает текущий вид в QImage."""
         from PyQt6.QtGui import QImage
         image = QImage(width, height, QImage.Format.Format_ARGB32)
         image.fill(Qt.GlobalColor.white)
