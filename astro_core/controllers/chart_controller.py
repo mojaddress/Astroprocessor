@@ -33,6 +33,7 @@ class ChartSettings:
     include_nodes: bool = True
     include_part_of_fortune: bool = True
     include_angles: bool = True
+    include_dsc: bool = True
     ephe_path: Optional[str] = None
     enabled_planets: Optional[list] = None
     enabled_aspects: Optional[list] = None
@@ -86,7 +87,17 @@ class ChartController:
         if display_profile_name:
             try:
                 profile = load_display_profile(display_profile_name)
+                ui_flags = {
+                    key: settings_dict[key]
+                    for key in (
+                        "include_chiron", "include_nodes",
+                        "include_part_of_fortune", "include_angles", "include_dsc",
+                    )
+                    if key in settings_dict
+                }
                 settings_dict = apply_profile_to_settings(profile, settings_dict)
+                # Галочки левой панели приоритетнее профиля отображения (итерация 20)
+                settings_dict.update(ui_flags)
             except FileNotFoundError:
                 pass  # Use settings as-is
 
@@ -152,6 +163,7 @@ class ChartController:
             "include_nodes": settings.include_nodes,
             "include_part_of_fortune": settings.include_part_of_fortune,
             "include_angles": settings.include_angles,
+            "include_dsc": settings.include_dsc,
             "ephe_path": settings.ephe_path,
             "enabled_planets": settings.enabled_planets,
             "enabled_aspects": settings.enabled_aspects,

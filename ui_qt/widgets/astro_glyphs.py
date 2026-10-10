@@ -136,6 +136,14 @@ def glyph_chiron():
     return p, []
 
 
+def glyph_part_of_fortune():
+    p = QPainterPath()
+    _circle(p, 50, 50, 20)
+    p.moveTo(30, 50); p.lineTo(70, 50)
+    p.moveTo(50, 30); p.lineTo(50, 70)
+    return p, []
+
+
 GLYPH_BUILDERS = {
     "Sun": glyph_sun,
     "Moon": glyph_moon,
@@ -151,6 +159,7 @@ GLYPH_BUILDERS = {
     "TrueNode": glyph_north_node,
     "SouthNode": glyph_south_node,
     "Chiron": glyph_chiron,
+    "PartOfFortune": glyph_part_of_fortune,
 }
 
 

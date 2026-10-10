@@ -106,7 +106,7 @@ class TransitPanel(QWidget):
         
         self.radio_no_city = QRadioButton("Без города")
         self.radio_with_city = QRadioButton("Выбрать город")
-        self.radio_no_city.setChecked(True)
+        self.radio_with_city.setChecked(True)
         city_source_group = QButtonGroup(self)
         city_source_group.addButton(self.radio_no_city)
         city_source_group.addButton(self.radio_with_city)

@@ -242,6 +242,8 @@ def build_natal_chart(birth, settings=None):
             ("ASC", asc_longitude),
             ("MC", mc_longitude),
         ]
+        if settings.get("include_dsc", True):
+            angle_points.append(("DSC", (asc_longitude + 180.0) % 360.0))
 
         for name, longitude in angle_points:
             normalized = normalize_longitude(longitude)
