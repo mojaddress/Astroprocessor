@@ -15,6 +15,9 @@ from astro_core.controllers import CityController, ProfileController
 from astro_core.controllers.city_controller import City
 
 
+from PyQt6.QtWidgets import QGridLayout
+
+
 class CityCompleter(QCompleter):
     """Custom completer for city search."""
     
@@ -115,6 +118,7 @@ class BirthInputPanel(QWidget):
         # --- City Selection Group ---
         city_group = QGroupBox("🏙️ Город рождения")
         city_layout = QVBoxLayout(city_group)
+        city_layout.setSpacing(6)
         
         # Source radio buttons
         self.radio_city = QRadioButton("Из города")
@@ -237,23 +241,20 @@ class BirthInputPanel(QWidget):
         
         # Label visibility options
         label_group = QGroupBox("Подписи на карте")
-        label_layout = QVBoxLayout(label_group)
+        label_layout = QGridLayout(label_group)
         
-        self.chk_show_planet_labels = QCheckBox("Показывать названия планет")
+        self.chk_show_planet_labels = QCheckBox("Планеты")
         self.chk_show_planet_labels.setChecked(True)
-        label_layout.addWidget(self.chk_show_planet_labels)
-        
-        self.chk_show_asteroid_labels = QCheckBox("Показывать названия астероидов (Хирон)")
+        label_layout.addWidget(self.chk_show_planet_labels, 0, 0)
+        self.chk_show_asteroid_labels = QCheckBox("Астеройды (Хирон)")
         self.chk_show_asteroid_labels.setChecked(True)
-        label_layout.addWidget(self.chk_show_asteroid_labels)
-        
-        self.chk_show_node_labels = QCheckBox("Показывать названия узлов (Раху/Кету)")
+        label_layout.addWidget(self.chk_show_asteroid_labels, 0, 1)
+        self.chk_show_node_labels = QCheckBox("Узлы (Раху / Кету)")
         self.chk_show_node_labels.setChecked(True)
-        label_layout.addWidget(self.chk_show_node_labels)
-        
-        self.chk_show_angle_labels = QCheckBox("Показывать ASC/MC")
+        label_layout.addWidget(self.chk_show_node_labels, 1, 0)
+        self.chk_show_angle_labels = QCheckBox("ASC / MC")
         self.chk_show_angle_labels.setChecked(True)
-        label_layout.addWidget(self.chk_show_angle_labels)
+        label_layout.addWidget(self.chk_show_angle_labels, 1, 1)
         
         display_layout.addWidget(label_group)
         
@@ -294,16 +295,18 @@ class BirthInputPanel(QWidget):
         self.chk_chiron.setChecked(True)
         self.chk_nodes = QCheckBox("Лунные узлы")
         self.chk_nodes.setChecked(True)
-        self.chk_fortune = QCheckBox("Part of Fortune")
+        self.chk_fortune = QCheckBox("Колесо Фортуны")
         self.chk_fortune.setChecked(True)
         self.chk_angles = QCheckBox("ASC/MC")
         self.chk_angles.setChecked(True)
-        
-        obj_layout = QHBoxLayout()
-        obj_layout.addWidget(self.chk_chiron)
-        obj_layout.addWidget(self.chk_nodes)
-        obj_layout.addWidget(self.chk_fortune)
-        obj_layout.addWidget(self.chk_angles)
+        self.chk_dsc = QCheckBox("DSC")
+        self.chk_dsc.setChecked(True)
+        obj_layout = QGridLayout()
+        obj_layout.addWidget(self.chk_chiron, 0, 0)
+        obj_layout.addWidget(self.chk_nodes, 0, 1)
+        obj_layout.addWidget(self.chk_fortune, 0, 2)
+        obj_layout.addWidget(self.chk_angles, 1, 0)
+        obj_layout.addWidget(self.chk_dsc, 1, 1)
         settings_layout.addRow("Объекты:", obj_layout)
         
         self.edit_ephe_path = QLineEdit("ephe")
@@ -347,7 +350,7 @@ class BirthInputPanel(QWidget):
         for widget in [
             self.combo_house_system, self.radio_tropical, self.radio_sidereal,
             self.combo_ayanamsha, self.chk_chiron, self.chk_nodes,
-            self.chk_fortune, self.chk_angles,
+            self.chk_fortune, self.chk_angles, self.chk_dsc,
             self.chk_show_planet_labels, self.chk_show_asteroid_labels,
             self.chk_show_node_labels, self.chk_show_angle_labels
         ]:
@@ -418,8 +421,47 @@ class BirthInputPanel(QWidget):
         self.edit_city_query.setEnabled(use_city)
         self.combo_city.setEnabled(use_city)
         self.manual_widget.setEnabled(not use_city)
-        self.lbl_city_info.setVisible(use_city)
+        if use_city:
+            self._sync_city_info()
+        else:
+            self.lbl_city_info.setVisible(False)
         
+    def set_object_flags(self, objects: dict, appearance: dict = None):
+        """Выставляет галочки объектов и подписей из профиля отображения (итерация 20)."""
+        if "Chiron" in objects:
+            self.chk_chiron.setChecked(bool(objects["Chiron"]))
+        if "LunarNodes" in objects:
+            self.chk_nodes.setChecked(bool(objects["LunarNodes"]))
+        if "PartOfFortune" in objects:
+            self.chk_fortune.setChecked(bool(objects["PartOfFortune"]))
+        if "Angles" in objects:
+            self.chk_angles.setChecked(bool(objects["Angles"]))
+            self.chk_dsc.setChecked(bool(objects["Angles"]))
+        if appearance:
+            pairs = (
+                ("show_planet_labels", self.chk_show_planet_labels),
+                ("show_asteroid_labels", self.chk_show_asteroid_labels),
+                ("show_node_labels", self.chk_show_node_labels),
+                ("show_angle_labels", self.chk_show_angle_labels),
+            )
+            for key, box in pairs:
+                if key in appearance:
+                    box.setChecked(bool(appearance[key]))
+
+    def _find_city_by_coords(self, lat, lon):
+        """Ищет город по координатам (для старых профилей без города)."""
+        try:
+            for city in self._city_controller.get_all_cities():
+                if abs(city.latitude - lat) < 0.01 and abs(city.longitude - lon) < 0.01:
+                    return city
+        except Exception:
+            pass
+        return None
+
+    def _sync_city_info(self):
+        """Скрывает пустую строку информации о городе (убирает пустой зазор)."""
+        self.lbl_city_info.setVisible(bool(self.lbl_city_info.text().strip()))
+
     def _on_manual_coords_toggled(self, checked: bool):
         """Toggle manual coordinates visibility."""
         self.manual_widget.setVisible(checked)
@@ -447,10 +489,11 @@ class BirthInputPanel(QWidget):
             self.spin_utc_offset.setValue(tz_info["utc_offset"])
             
             self.lbl_city_info.setText(
-                f"🏙️ {city.name}, {city.country} · "
-                f"{city.latitude:.2f}, {city.longitude:.2f} · "
-                f"UTC{tz_info['utc_offset']:+.1f}"
-            )
+            f"🏙️ {city.name}, {city.country} · "
+            f"{city.latitude:.2f}, {city.longitude:.2f} · "
+            f"UTC{tz_info['utc_offset']:+.1f}"
+        )
+        self._sync_city_info()
             
     def _on_delete_profile(self):
         name = self.profile_combo.currentText()
@@ -524,6 +567,7 @@ class BirthInputPanel(QWidget):
             "include_nodes": self.chk_nodes.isChecked(),
             "include_part_of_fortune": self.chk_fortune.isChecked(),
             "include_angles": self.chk_angles.isChecked(),
+            "include_dsc": self.chk_dsc.isChecked(),
             "show_planet_labels": self.chk_show_planet_labels.isChecked(),
             "show_asteroid_labels": self.chk_show_asteroid_labels.isChecked(),
             "show_node_labels": self.chk_show_node_labels.isChecked(),
@@ -544,22 +588,28 @@ class BirthInputPanel(QWidget):
         self.spin_longitude.setValue(birth_data.get("longitude", 0))
         self.spin_utc_offset.setValue(birth_data.get("utc_offset_hours", 0))
         
-        # Set city if available
+        # Set city if available (итерация 19: город восстанавливается в список)
         city_name = birth_data.get("city_name", "")
         city_country = birth_data.get("city_country", "")
-        city_timezone = birth_data.get("city_timezone", "")
-        if city_name or city_country:
+        if not city_name:
+            found = self._find_city_by_coords(
+                birth_data.get("latitude", 0), birth_data.get("longitude", 0))
+            if found is not None:
+                city_name = found.name
+                city_country = found.country
+        if city_name:
             display_name = f"{city_name}, {city_country}" if city_country else city_name
             self.edit_city_query.setText(display_name)
-            # Update city combo
-            self.combo_city.clear()
-            self.combo_city.addItem(display_name)
-            self.combo_city.setCurrentIndex(0)
-            # Update city info label
-            if city_timezone:
-                self.lbl_city_info.setText(f"Часовой пояс: {city_timezone}")
-            else:
-                self.lbl_city_info.setText("")
+            self._on_city_query_changed(city_name)
+            idx = self.combo_city.findText(display_name)
+            if idx < 0:
+                self.combo_city.insertItem(0, display_name)
+                idx = 0
+            self.combo_city.setCurrentIndex(idx)
+            self._on_city_selected(idx)
+        else:
+            self.lbl_city_info.setText("")
+        self._sync_city_info()
         
     def set_editing_profile(self, name: str):
         """Set editing mode for a profile."""

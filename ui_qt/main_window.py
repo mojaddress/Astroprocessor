@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import (
     QMenuBar, QStatusBar, QToolBar, QTabWidget, QMessageBox,
     QLabel, QProgressBar, QSizePolicy, QInputDialog
 )
+from PyQt6.QtWidgets import QScrollArea
 from PyQt6.QtCore import Qt, pyqtSlot, QSize
 from PyQt6.QtGui import QAction, QIcon, QKeySequence
 from typing import Optional
@@ -19,6 +20,13 @@ from astro_core.controllers import (
     ProfileController,
 )
 from astro_core.state import StateManager
+
+from PyQt6.QtWidgets import (
+    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
+    QMenuBar, QStatusBar, QToolBar, QTabWidget, QMessageBox,
+    QLabel, QProgressBar, QSizePolicy, QInputDialog,
+    QFileDialog, QInputDialog  # <-- ДОБАВИТЬ QFileDialog
+)
 
 # Import widgets
 from ui_qt.widgets import (
@@ -99,19 +107,24 @@ class MainWindow(QMainWindow):
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(4, 4, 4, 4)
         
-        # Birth input panel
+        # Birth input panel в области прокрутки (итерация 19)
         self._birth_input_panel = BirthInputPanel(
             self._city_controller,
             self._profile_controller
         )
-        left_layout.addWidget(self._birth_input_panel)
+        birth_scroll = QScrollArea()
+        birth_scroll.setWidgetResizable(True)
+        birth_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        birth_scroll.setWidget(self._birth_input_panel)
+        left_layout.addWidget(birth_scroll, 1)
         
         # Load display profiles into birth input panel
         self._birth_input_panel._load_display_profiles()
         
         # Profile manager
         self._profile_manager = ProfileManager(self._profile_controller)
-        left_layout.addWidget(self._profile_manager)
+        self._profile_manager.setMaximumHeight(80)
+        left_layout.addWidget(self._profile_manager, 0)
         
         # CENTER PANE - Chart View (main focus)
         self._chart_view = ChartView()
@@ -254,6 +267,12 @@ class MainWindow(QMainWindow):
         save_profile_action.setShortcut(QKeySequence.StandardKey.Save)
         save_profile_action.triggered.connect(self._on_save_profile)
         file_menu.addAction(save_profile_action)
+
+        # Export PNG
+        export_png_action = QAction("Экспорт PNG...", self)
+        export_png_action.setShortcut("Ctrl+E")
+        export_png_action.triggered.connect(self._on_export_png)
+        file_menu.addAction(export_png_action)
         
         file_menu.addSeparator()
         
@@ -543,19 +562,27 @@ class MainWindow(QMainWindow):
             self._status_label.setText("Готово")
 
     def _get_display_settings(self) -> dict:
-        """Текущие настройки отображения из профиля отображения."""
-        try:
-            from astro_core.display_profiles import load_display_profile, get_render_kwargs
-            if self._current_display_profile_name:
-                profile = load_display_profile(self._current_display_profile_name)
-                return get_render_kwargs(profile)
-        except Exception:
-            pass
-        return {
+        """Настройки отображения: профиль как база, галочки левой панели поверх (итерация 20)."""
+        settings = {
             "show_planet_labels": True, "show_asteroid_labels": True,
             "show_node_labels": True, "show_angle_labels": True,
             "show_houses": True, "show_aspects": True, "label_mode": "symbols",
         }
+        try:
+            from astro_core.display_profiles import load_display_profile, get_render_kwargs
+            if self._current_display_profile_name:
+                profile = load_display_profile(self._current_display_profile_name)
+                settings.update(get_render_kwargs(profile))
+        except Exception:
+            pass
+        p = self._birth_input_panel
+        settings.update({
+            "show_planet_labels": p.chk_show_planet_labels.isChecked(),
+            "show_asteroid_labels": p.chk_show_asteroid_labels.isChecked(),
+            "show_node_labels": p.chk_show_node_labels.isChecked(),
+            "show_angle_labels": p.chk_show_angle_labels.isChecked(),
+        })
+        return settings
             
     def _update_chart_view_settings(self):
         """Применяет профиль отображения к карте.
@@ -683,6 +710,46 @@ class MainWindow(QMainWindow):
             "• Графических SVG-карт с зумом/панорамированием\n\n"
             "© 2026 Astro Processor Project"
         )
+
+    def _on_export_png(self):
+        """Экспорт текущей карты в PNG высокого разрешения."""
+        if not self._chart_data:
+            QMessageBox.warning(self, "Предупреждение", "Сначала рассчитайте карту")
+            return
+        
+        # Диалог выбора разрешения
+        resolutions, ok = QInputDialog.getItem(
+            self,
+            "Экспорт PNG",
+            "Выберите разрешение (px):",
+            ["800x800", "1600x1600", "3200x3200", "6400x6400"],
+            2,  # по умолчанию 3200x3200
+            False
+        )
+        if not ok:
+            return
+        
+        size = int(resolutions.split("x")[0])
+        
+        # Диалог сохранения файла
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Сохранить карту как PNG",
+            "",
+            "PNG Images (*.png);;All Files (*)"
+        )
+        if not file_path:
+            return
+        
+        try:
+            image = self._chart_view.render_to_image(size, size)
+            if image.save(file_path, "PNG"):
+                self._status_label.setText(f"Карта экспортирована: {file_path}")
+                QMessageBox.information(self, "Успех", f"Карта сохранена в:\n{file_path}")
+            else:
+                QMessageBox.critical(self, "Ошибка", "Не удалось сохранить файл")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Ошибка экспорта:\n{str(e)}")
         
     def _on_recalculate_chart(self):
         """Handle recalculate chart trigger."""
@@ -900,7 +967,9 @@ class MainWindow(QMainWindow):
                 latitude=birth_data["latitude"],
                 longitude=birth_data["longitude"],
                 utc_offset_hours=birth_data["utc_offset_hours"],
-                timezone="",  # Will be filled by controller if needed
+                city_name=birth_data.get("city_name", ""),
+                city_country=birth_data.get("city_country", ""),
+                timezone=birth_data.get("city_timezone", ""),
                 created_at=datetime.now().isoformat() if not editing_name else None
             )
             
@@ -966,10 +1035,20 @@ class MainWindow(QMainWindow):
         try:
             self._display_profile_controller.set_current_profile(profile_name)
             self._current_display_profile_name = profile_name
+            try:
+                from astro_core.display_profiles import load_display_profile
+                profile = load_display_profile(profile_name)
+                self._birth_input_panel.set_object_flags(
+                    profile.get("objects", {}), profile.get("appearance", {}))
+            except Exception:
+                pass
             
             # Update chart view with new appearance
             self._update_chart_view_settings()
-            self._update_chart_view()  # Re-render with new profile
+            if self._current_birth_data and self._current_chart_result:
+                self._on_recalculate_chart()
+            else:
+                self._update_chart_view()
             
             self._status_label.setText(f"Профиль отображения применен: {profile_name}")
             self._save_state()

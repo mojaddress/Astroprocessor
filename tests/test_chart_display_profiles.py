@@ -148,7 +148,7 @@ def test_minimal_profile_integration():
     additional_names = {p["name"] for p in result["additional_points"]}
     assert "ASC" in additional_names
     assert "MC" in additional_names
-
+    assert "DSC" in additional_names
 
 def test_aspects_only_between_enabled_objects():
     """Аспекты строятся только между включёнными объектами."""
@@ -158,7 +158,7 @@ def test_aspects_only_between_enabled_objects():
         "include_nodes": False,
     }
     result = build_natal_chart(DEMO_BIRTH, settings)
-    allowed = {"Sun", "Moon", "ASC", "MC", "PartOfFortune"}
+    allowed = {"Sun", "Moon", "ASC", "MC", "DSC", "PartOfFortune"}
     for aspect in result["aspects"]:
         assert aspect["point_a"] in allowed, f"Лишняя точка в аспекте: {aspect['point_a']}"
         assert aspect["point_b"] in allowed, f"Лишняя точка в аспекте: {aspect['point_b']}"

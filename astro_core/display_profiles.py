@@ -315,6 +315,7 @@ def apply_profile_to_settings(profile, base_settings=None):
     settings["include_nodes"] = bool(objects.get("LunarNodes", True))
     settings["include_part_of_fortune"] = bool(objects.get("PartOfFortune", True))
     settings["include_angles"] = bool(objects.get("Angles", True))
+    settings["include_dsc"] = bool(objects.get("Angles", True))
     settings["enabled_planets"] = [p for p in ALL_PLANETS if objects.get(p, True)]
 
     aspects = profile.get("aspects", {})
