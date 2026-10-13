@@ -9,6 +9,9 @@ from .progression_panel import ProgressionPanel
 from .profile_manager import ProfileManager
 from .display_profile_editor import DisplayProfileEditor
 from .city_selector import CitySelector
+from .synastry_panel import SynastryPanel
+from .transits_panel import TransitsPanel
+from .interpretation_panel import InterpretationPanel
 
 __all__ = [
     "ChartView",
@@ -17,5 +20,8 @@ __all__ = [
     "ProgressionPanel",
     "ProfileManager",
     "DisplayProfileEditor",
-    "CitySelector",
+        "CitySelector",
+    "SynastryPanel",
+    "TransitsPanel",
+    "InterpretationPanel",
 ]
