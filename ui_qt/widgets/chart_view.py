@@ -29,6 +29,7 @@ from PyQt6.QtGui import (
 
 from .astro_glyphs import get_glyph, GLYPH_STROKE
 from astro_core.constants import get_planet_name_ru, get_sign_name_ru
+from astro_core.interpretations import aspect_tooltip
 
 # Геометрия карты (доли от размера сцены)
 SCENE_SIZE = 800
@@ -86,6 +87,9 @@ class ChartView(QGraphicsView):
         self._transit_planets: List[Dict] = []
         self._transit_aspects: List[Dict] = []
         self._is_transit_mode = False
+        self._chart_b = None
+        self._synastry_aspects: List[Dict] = []
+        self._is_synastry_mode = False
         self._svg_content = ""
 
         self._settings = {
@@ -111,6 +115,7 @@ class ChartView(QGraphicsView):
     def set_chart_data(self, chart_data: Dict, display_settings: Optional[Dict] = None):
         self._chart_data = chart_data
         self._is_transit_mode = False
+        self._is_synastry_mode = False
         if display_settings:
             self._settings.update(display_settings)
         self._rebuild()
@@ -140,6 +145,18 @@ class ChartView(QGraphicsView):
             item.setDefaultTextColor(QColor("#C0392B"))
             self._scene.setSceneRect(self._scene.itemsBoundingRect())
 
+    def set_synastry_chart_data(self, chart_a, chart_b, synastry_aspects,
+                                display_settings=None):
+        """Двухкруговая диаграмма синастрии: A внутри, B снаружи."""
+        self._chart_data = chart_a
+        self._chart_b = chart_b
+        self._synastry_aspects = synastry_aspects or []
+        self._is_transit_mode = False
+        self._is_synastry_mode = True
+        if display_settings:
+            self._settings.update(display_settings)
+        self._rebuild()
+
     def set_transit_data(self, transit_planets, transit_aspects):
         self._transit_planets = transit_planets or []
         self._transit_aspects = transit_aspects or []
@@ -155,7 +172,9 @@ class ChartView(QGraphicsView):
         self.setScene(self._scene)
         self._scene.addRect(0, 0, SCENE_SIZE, SCENE_SIZE,
                             QPen(Qt.PenStyle.NoPen), QBrush(QColor("white")))
-        if self._is_transit_mode:
+        if self._is_synastry_mode:
+            self._build_synastry()
+        elif self._is_transit_mode:
             self._build_transit()
         else:
             self._build_natal()
@@ -371,6 +390,7 @@ class ChartView(QGraphicsView):
                                 1.0, dash)
                 line = self._scene.addLine(positions[pa].x(), positions[pa].y(),
                                            positions[pb].x(), positions[pb].y(), pen)
+                line.setToolTip(aspect_tooltip(a.get("aspect", ""), pa, pb))
                 line.setOpacity(opacity)
 
     def _draw_point_of_fortune(self, additional, radius, dot_r, glyph_box):
@@ -480,8 +500,42 @@ class ChartView(QGraphicsView):
                                 1.0, True)
                 line = self._scene.addLine(tr_pos[tp].x(), tr_pos[tp].y(),
                                            nat_pos[np_].x(), nat_pos[np_].y(), pen)
+                line.setToolTip(aspect_tooltip(a.get("aspect", ""), tp, np_))
                 line.setOpacity(0.8)
         self._draw_angles(self._chart_data.get("additional_points", []), r_nat, s * R_OUTER)
+        self._draw_legend()
+
+    def _build_synastry(self):
+        c = SCENE_SIZE / 2
+        s = SCENE_SIZE
+        r_tr, r_nat = s * 0.360, s * 0.280
+        name_a = self._chart_data.get("birth", {}).get("name", "Человек A")
+        name_b = (self._chart_b or {}).get("birth", {}).get("name", "Человек B")
+        self._draw_title(f"Синастрия: {name_a} + {name_b}")
+        for r, col, w, dash in ((s * R_OUTER, "#000000", 2.0, False),
+                                (s * R_ZODIAC, "#000000", 1.0, False),
+                                (r_tr, "#000000", 0.6, True),
+                                (r_nat, "#000000", 0.6, False),
+                                (s * R_ASPECTS, "#888888", 0.6, True)):
+            d = 2 * r
+            self._scene.addEllipse(QRectF(c - r, c - r, d, d), self._pen(col, w, dash))
+        self._draw_zodiac(s * R_ZODIAC, s * R_OUTER, 15)
+        pos_a = self._place_planets_with_anticollision(
+            self._chart_data.get("planets", []), r_nat, 5, 24, s * 0.02)
+        pos_b = self._place_planets_with_anticollision(
+            (self._chart_b or {}).get("planets", []), r_tr, 5, 24, s * 0.02)
+        for a in self._synastry_aspects:
+            pa, pb = a.get("point_a"), a.get("point_b")
+            if a.get("point_a_chart") == "A":
+                p1, p2 = pos_a.get(pa), pos_b.get(pb)
+            else:
+                p1, p2 = pos_b.get(pa), pos_a.get(pb)
+            if p1 is None or p2 is None:
+                continue
+            pen = self._pen(self._color(a.get("aspect", ""), "aspect_colors"), 1.2)
+            line = self._scene.addLine(p1.x(), p1.y(), p2.x(), p2.y(), pen)
+            line.setToolTip(aspect_tooltip(a.get("aspect", ""), pa, pb))
+            line.setOpacity(0.85)
         self._draw_legend()
 
     # ------------------------------------------------------------ UX

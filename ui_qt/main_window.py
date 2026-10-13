@@ -20,6 +20,7 @@ from astro_core.controllers import (
     ProfileController,
 )
 from astro_core.state import StateManager
+from astro_core.controllers.synastry_controller import SynastryController
 
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
@@ -36,7 +37,10 @@ from ui_qt.widgets import (
     ProgressionPanel,
     ProfileManager,
     DisplayProfileEditor,
-    CitySelector
+        CitySelector,
+    SynastryPanel,
+    TransitsPanel,
+    InterpretationPanel,
 )
 from ui_qt.models.chart_model import (
     create_model_for_objects,
@@ -66,6 +70,7 @@ class MainWindow(QMainWindow):
         self._chart_controller = ChartController()
         self._transit_controller = TransitController()
         self._progression_controller = ProgressionController()
+        self._synastry_controller = SynastryController()
         self._display_profile_controller = DisplayProfileController()
         self._city_controller = CityController()
         self._profile_controller = ProfileController()
@@ -147,6 +152,18 @@ class MainWindow(QMainWindow):
         # Progression panel
         self._progression_panel = ProgressionPanel()
         self._calc_tabs.addTab(self._progression_panel, "Прогрессии")
+
+        # Synastry panel (итерация 21)
+        self._synastry_panel = SynastryPanel(self._profile_controller)
+        self._transits_panel = TransitsPanel(
+            lambda: self._current_chart_result,
+            lambda chart, d: build_natal_chart(make_sky_birth_from_chart(chart, d)))
+        self._interpretation_panel = InterpretationPanel(
+            lambda: self._current_chart_result,
+            lambda chart, d: build_natal_chart(make_sky_birth_from_chart(chart, d)))
+        self._calc_tabs.addTab(self._synastry_panel, "Синастрия")
+        self._calc_tabs.addTab(self._transits_panel, "🌠 Транзиты")
+        self._calc_tabs.addTab(self._interpretation_panel, "📖 Разбор")
         
         right_layout.addWidget(self._calc_tabs)
         
@@ -390,6 +407,19 @@ class MainWindow(QMainWindow):
         calc_progressions_action.setToolTip("Рассчитать прогрессии (F7)")
         calc_progressions_action.triggered.connect(self._on_calculate_progressions)
         toolbar.addAction(calc_progressions_action)
+
+        calc_synastry_action = QAction("💑 Синастрия", self)
+        calc_synastry_action.setToolTip("Совместимость со вторым человеком")
+        calc_synastry_action.triggered.connect(self._on_calculate_synastry)
+        toolbar.addAction(calc_synastry_action)
+        transits_action = QAction("🌠 Транзиты", self)
+        transits_action.setToolTip("Транзиты на дату и периоды действия")
+        transits_action.triggered.connect(self._on_show_transits)
+        toolbar.addAction(transits_action)
+        interp_action = QAction("📖 Разбор", self)
+        interp_action.setToolTip("Интерпретации натала и транзитов")
+        interp_action.triggered.connect(self._on_show_interpretation)
+        toolbar.addAction(interp_action)
         
         toolbar.addSeparator()
         
@@ -475,6 +505,7 @@ class MainWindow(QMainWindow):
         
         # Progression panel signals
         self._progression_panel.calculate_requested.connect(self._handle_calculate_progressions)
+        self._synastry_panel.calculate_requested.connect(self._handle_calculate_synastry)
         
         # Profile manager signals
         self._profile_manager.profile_selected.connect(self._on_profile_selected)
@@ -899,6 +930,55 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "Ошибка расчёта транзитов", f"Не удалось рассчитать транзиты:\n{str(e)}")
             self._status_label.setText("Ошибка расчёта транзитов")
             
+    def _on_show_interpretation(self):
+        """Переключает на вкладку Разбор."""
+        self.self._calc_tabs.setCurrentWidget(self._interpretation_panel)
+
+    def _on_show_transits(self):
+        """Переключает на вкладку Транзиты."""
+        self.self._calc_tabs.setCurrentWidget(self._transits_panel)
+
+    def _on_calculate_synastry(self):
+        """Переключает на вкладку синастрии и запускает расчёт."""
+        idx = self._calc_tabs.indexOf(self._synastry_panel)
+        if idx >= 0:
+            self._calc_tabs.setCurrentIndex(idx)
+        self._synastry_panel._on_calculate()
+
+    def _handle_calculate_synastry(self, person_b_name: str):
+        """Считает совместимость текущей карты с профилем второго человека."""
+        if not self._current_chart_result:
+            QMessageBox.warning(self, "Предупреждение",
+                                "Сначала рассчитайте натальную карту первого человека")
+            return
+        if not person_b_name:
+            QMessageBox.warning(self, "Предупреждение",
+                                "Выберите профиль второго человека")
+            return
+        self._show_progress("Расчёт синастрии...")
+        try:
+            profile_b = self._profile_controller.load_profile(person_b_name)
+            birth_b = self._profile_controller.profile_to_birth_data(profile_b)
+            settings = self._birth_input_panel.get_settings()
+            chart_b = self._chart_controller.calculate_chart(
+                birth_b, settings, self._current_display_profile_name,
+                include_svg=False)
+            result = self._synastry_controller.calculate_synastry(
+                self._current_chart_result, chart_b)
+            self._current_synastry_result = result
+            self._synastry_panel.set_results(result)
+            self._chart_view.set_synastry_chart_data(
+                self._current_chart_result, chart_b, result.aspects,
+                self._get_display_settings())
+            self._status_label.setText(
+                f"Синастрия: {result.chart_a_name} + {result.chart_b_name} — "
+                f"{result.compatibility_percentage:.0f}%")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка синастрии",
+                                 f"Не удалось рассчитать совместимость:\n{str(e)}")
+        finally:
+            self._hide_progress()
+
     def _handle_calculate_progressions(self, progression_type: str, progression_date):
         """Handle progression calculation request."""
         if not self._current_chart_result:
