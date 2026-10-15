@@ -133,14 +133,11 @@ class BirthInputPanel(QWidget):
         city_layout.addLayout(source_layout)
         
         # City search
-        self.edit_city_query = QLineEdit()
-        self.edit_city_query.setPlaceholderText("Поиск города...")
-        self.city_completer = CityCompleter(self._city_controller, self)
-        self.edit_city_query.setCompleter(self.city_completer)
-        city_layout.addWidget(self.edit_city_query)
+        city_completer = CityCompleter(self._city_controller, self)
         
         self.combo_city = QComboBox()
-        self.combo_city.setEditable(False)
+        self.combo_city.setEditable(True)
+        self.combo_city.setCompleter(self.city_completer)
         self.combo_city.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.combo_city.setMinimumContentsLength(20)
         city_layout.addWidget(self.combo_city)
@@ -207,7 +204,7 @@ class BirthInputPanel(QWidget):
         # Connect signals for city/manual toggle
         self.radio_city.toggled.connect(self._on_coord_source_changed)
         self.combo_city.currentIndexChanged.connect(self._on_city_selected)
-        self.edit_city_query.textChanged.connect(self._on_city_query_changed)
+        self.combo_city.lineEdit().textChanged.connect(self._on_city_query_changed)
         # Connect completer activated signal to update combo box
         self.city_completer.activated.connect(self._on_completer_activated)
         
@@ -240,18 +237,12 @@ class BirthInputPanel(QWidget):
         display_layout.addWidget(self.edit_display_profile_name)
         
         # Label visibility options
-        label_group = QGroupBox("Подписи на карте")
+        label_group = QGroupBox("Названия объектов (текст)")
         label_layout = QGridLayout(label_group)
         
         self.chk_show_planet_labels = QCheckBox("Планеты")
         self.chk_show_planet_labels.setChecked(True)
         label_layout.addWidget(self.chk_show_planet_labels, 0, 0)
-        self.chk_show_asteroid_labels = QCheckBox("Астеройды (Хирон)")
-        self.chk_show_asteroid_labels.setChecked(True)
-        label_layout.addWidget(self.chk_show_asteroid_labels, 0, 1)
-        self.chk_show_node_labels = QCheckBox("Узлы (Раху / Кету)")
-        self.chk_show_node_labels.setChecked(True)
-        label_layout.addWidget(self.chk_show_node_labels, 1, 0)
         self.chk_show_angle_labels = QCheckBox("ASC / MC")
         self.chk_show_angle_labels.setChecked(True)
         label_layout.addWidget(self.chk_show_angle_labels, 1, 1)
@@ -295,7 +286,7 @@ class BirthInputPanel(QWidget):
         self.chk_chiron.setChecked(True)
         self.chk_nodes = QCheckBox("Лунные узлы")
         self.chk_nodes.setChecked(True)
-        self.chk_fortune = QCheckBox("Колесо Фортуны")
+        self.chk_fortune = QCheckBox("Фортуна")
         self.chk_fortune.setChecked(True)
         self.chk_angles = QCheckBox("ASC/MC")
         self.chk_angles.setChecked(True)
@@ -315,10 +306,6 @@ class BirthInputPanel(QWidget):
         layout.addWidget(settings_group)
         
         # --- Calculate Button ---
-        self.btn_calculate = QPushButton("🔮 Рассчитать карту")
-        self.btn_calculate.setDefault(True)
-        self.btn_calculate.setStyleSheet("font-weight: bold; padding: 8px;")
-        layout.addWidget(self.btn_calculate)
         
         # Connect signals
         self._connect_signals()
@@ -344,15 +331,12 @@ class BirthInputPanel(QWidget):
             lambda: self.display_profile_apply_requested.emit(self.combo_display_profile.currentText())
         )
         self.btn_save_display_profile.clicked.connect(self._on_save_display_profile)
-        self.btn_calculate.clicked.connect(self._on_calculate)
         
         # Auto-recalc on settings change
         for widget in [
             self.combo_house_system, self.radio_tropical, self.radio_sidereal,
             self.combo_ayanamsha, self.chk_chiron, self.chk_nodes,
             self.chk_fortune, self.chk_angles, self.chk_dsc,
-            self.chk_show_planet_labels, self.chk_show_asteroid_labels,
-            self.chk_show_node_labels, self.chk_show_angle_labels
         ]:
             if hasattr(widget, 'currentIndexChanged'):
                 widget.currentIndexChanged.connect(self.recalc_triggered.emit)
@@ -418,7 +402,6 @@ class BirthInputPanel(QWidget):
             
     def _on_coord_source_changed(self):
         use_city = self.radio_city.isChecked()
-        self.edit_city_query.setEnabled(use_city)
         self.combo_city.setEnabled(use_city)
         self.manual_widget.setEnabled(not use_city)
         if use_city:
@@ -440,8 +423,6 @@ class BirthInputPanel(QWidget):
         if appearance:
             pairs = (
                 ("show_planet_labels", self.chk_show_planet_labels),
-                ("show_asteroid_labels", self.chk_show_asteroid_labels),
-                ("show_node_labels", self.chk_show_node_labels),
                 ("show_angle_labels", self.chk_show_angle_labels),
             )
             for key, box in pairs:
@@ -569,8 +550,8 @@ class BirthInputPanel(QWidget):
             "include_angles": self.chk_angles.isChecked(),
             "include_dsc": self.chk_dsc.isChecked(),
             "show_planet_labels": self.chk_show_planet_labels.isChecked(),
-            "show_asteroid_labels": self.chk_show_asteroid_labels.isChecked(),
-            "show_node_labels": self.chk_show_node_labels.isChecked(),
+            "show_asteroid_labels": self.chk_chiron.isChecked(),
+            "show_node_labels": self.chk_nodes.isChecked(),
             "show_angle_labels": self.chk_show_angle_labels.isChecked(),
             "ephe_path": self.edit_ephe_path.text() or None,
         }
@@ -599,7 +580,6 @@ class BirthInputPanel(QWidget):
                 city_country = found.country
         if city_name:
             display_name = f"{city_name}, {city_country}" if city_country else city_name
-            self.edit_city_query.setText(display_name)
             self._on_city_query_changed(city_name)
             idx = self.combo_city.findText(display_name)
             if idx < 0:

@@ -160,10 +160,6 @@ class TransitPanel(QWidget):
         layout.addWidget(period_group)
         
         # --- Calculate Button ---
-        self.btn_calculate = QPushButton("🔮 Рассчитать транзиты")
-        self.btn_calculate.setDefault(True)
-        self.btn_calculate.setStyleSheet("font-weight: bold; padding: 8px;")
-        layout.addWidget(self.btn_calculate)
         
         # --- Results Table ---
         results_group = QGroupBox("Результаты")
@@ -203,7 +199,6 @@ class TransitPanel(QWidget):
         self.combo_transit_city.currentIndexChanged.connect(self._on_transit_city_selected)
         # Connect completer activated signal (if using completer)
         
-        self.btn_calculate.clicked.connect(self._on_calculate)
         self.btn_export_json.clicked.connect(self._on_export_json)
         
         # Initial population of transit city combo

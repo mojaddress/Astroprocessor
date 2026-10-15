@@ -127,6 +127,7 @@ class ChartView(QGraphicsView):
         self._transit_planets = transit_planets or []
         self._transit_aspects = transit_aspects or []
         self._is_transit_mode = True
+        self._is_synastry_mode = False
         if display_settings:
             self._settings.update(display_settings)
         self._rebuild()
@@ -230,6 +231,17 @@ class ChartView(QGraphicsView):
             if tooltip:
                 f.setToolTip(tooltip)
 
+    def _text_label(self, name):
+        """Нужно ли добавлять текстовое имя объекта (итерация 24)."""
+        s = self._settings
+        if name == "Chiron":
+            return bool(s.get("text_chiron", False))
+        if name in ("MeanNode", "TrueNode", "SouthNode"):
+            return bool(s.get("text_nodes", False))
+        if name == "PartOfFortune":
+            return bool(s.get("text_fortune", False))
+        return bool(s.get("show_planet_labels", False))
+
     def _show_label(self, name):
         s = self._settings
         if name == "Chiron":
@@ -315,26 +327,25 @@ class ChartView(QGraphicsView):
             dot.setToolTip(tip)
             dot.setAcceptHoverEvents(True)
 
-            if self._show_label(name):
-                label_radius = dot_radius + label_offset
-                for attempt in range(5):
-                    test_pos = lon_to_point(lon, label_radius + attempt * glyph_box * 0.4, c)
-                    conflict = False
-                    for ulon, upos in used_labels:
-                        dist = math.hypot(test_pos.x() - upos.x(), test_pos.y() - upos.y())
-                        if dist < glyph_box * 1.2:
-                            conflict = True
-                            break
-                    if not conflict:
-                        used_labels.append((lon, test_pos))
-                        mode = self._settings["label_mode"]
-                        if mode != "words":
-                            self._glyph(name, test_pos.x(), test_pos.y(),
-                                        glyph_box, color.name(), tooltip=tip)
-                        if mode != "symbols":
-                            self._text(test_pos.x(), test_pos.y() + glyph_box,
-                                       name, 11, color.name())
+            label_radius = dot_radius + label_offset
+            for attempt in range(5):
+                test_pos = lon_to_point(lon, label_radius + attempt * glyph_box * 0.4, c)
+                conflict = False
+                for ulon, upos in used_labels:
+                    dist = math.hypot(test_pos.x() - upos.x(), test_pos.y() - upos.y())
+                    if dist < glyph_box * 1.2:
+                        conflict = True
                         break
+                if not conflict:
+                    used_labels.append((lon, test_pos))
+                    mode = self._settings["label_mode"]
+                    if mode != "words":
+                        self._glyph(name, test_pos.x(), test_pos.y(),
+                                    glyph_box, color.name(), tooltip=tip)
+                    if mode != "symbols" and self._text_label(name):
+                        self._text(test_pos.x(), test_pos.y() + glyph_box,
+                                   get_planet_name_ru(name), 10, color.name())
+                    break
 
         return {name: data[0] for name, data in planet_positions.items()}
 
@@ -394,7 +405,7 @@ class ChartView(QGraphicsView):
                 line.setOpacity(opacity)
 
     def _draw_point_of_fortune(self, additional, radius, dot_r, glyph_box):
-        """Рисует Колесо Фортуны точкой с глифом; возвращает позицию или None."""
+        """Рисует Фортуна точкой с глифом; возвращает позицию или None."""
         c = SCENE_SIZE / 2
         for pt in additional:
             if pt.get("name") != "PartOfFortune":
@@ -413,6 +424,8 @@ class ChartView(QGraphicsView):
             dot.setAcceptHoverEvents(True)
             lp = lon_to_point(lon, radius + glyph_box * 0.8, c)
             self._glyph("PartOfFortune", lp.x(), lp.y(), glyph_box, color.name(), tooltip=tip)
+            if self._text_label("PartOfFortune"):
+                self._text(lp.x(), lp.y() + glyph_box, "Фортуна", 10, color.name())
             return pos
         return None
 

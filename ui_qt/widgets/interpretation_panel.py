@@ -73,7 +73,7 @@ class InterpretationPanel(QWidget):
         if not chart:
             self.browser.setPlainText(
                 "Нет натальной карты.\nСначала рассчитайте натальную карту, "
-                "затем вернитесь на вкладку «Разбор».")
+                "затем вернитесь на вкладку «Анализ».")
             return None
         return chart
 

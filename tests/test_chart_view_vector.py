@@ -137,3 +137,15 @@ def test_legend_present_and_toggle(app):
     view2 = ChartView()
     view2.set_chart_data(_chart_data(), {"show_legend": False})
     assert "Соединение" not in _texts(view2)
+
+def test_glyphs_present_even_when_labels_off(app):
+    view = ChartView()
+    view.set_chart_data(_chart_data(),
+                        {"show_planet_labels": False, "text_chiron": False})
+    assert len(_glyph_items(view)) >= len(PLANETS)
+
+
+def test_text_names_appear_with_flag(app):
+    view = ChartView()
+    view.set_chart_data(_chart_data(), {"text_chiron": True})
+    assert any("Хирон" in t for t in _texts(view))
