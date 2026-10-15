@@ -27,6 +27,25 @@ def register_fonts():
 
 def main():
     """Initialize and run the PyQt6 application."""
+    def _excepthook(exc_type, exc_value, exc_tb):
+        import traceback
+        msg = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+        try:
+            os.makedirs("logs", exist_ok=True)
+            with open(os.path.join("logs", "crash.log"), "a", encoding="utf-8") as f:
+                f.write(msg + "\n---\n")
+        except OSError:
+            pass
+        try:
+            from PyQt6.QtWidgets import QMessageBox
+            QMessageBox.critical(
+                None, "Ошибка приложения",
+                "Произошла ошибка. Диагноз сохранён в logs/crash.log\n\n" + str(exc_value))
+        except Exception:
+            pass
+        sys.__excepthook__(exc_type, exc_value, exc_tb)
+
+    sys.excepthook = _excepthook
     app = QApplication(sys.argv)
     
     # Register fonts for SVG rendering

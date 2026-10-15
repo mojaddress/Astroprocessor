@@ -162,8 +162,8 @@ class MainWindow(QMainWindow):
             lambda: self._current_chart_result,
             lambda chart, d: build_natal_chart(make_sky_birth_from_chart(chart, d)))
         self._calc_tabs.addTab(self._synastry_panel, "Синастрия")
-        self._calc_tabs.addTab(self._transits_panel, "🌠 Транзиты")
-        self._calc_tabs.addTab(self._interpretation_panel, "📖 Разбор")
+        self._calc_tabs.addTab(self._transits_panel, "🌠 Транзиты дня")
+        self._calc_tabs.addTab(self._interpretation_panel, "📖 Анализ")
         
         right_layout.addWidget(self._calc_tabs)
         
@@ -397,7 +397,7 @@ class MainWindow(QMainWindow):
         toolbar.addSeparator()
         
         # Calculate transits button
-        calc_transits_action = QAction("📊 Транзиты", self)
+        calc_transits_action = QAction("📊 Транзиты (таблица)", self)
         calc_transits_action.setToolTip("Рассчитать транзиты (F6)")
         calc_transits_action.triggered.connect(self._on_calculate_transits)
         toolbar.addAction(calc_transits_action)
@@ -412,11 +412,11 @@ class MainWindow(QMainWindow):
         calc_synastry_action.setToolTip("Совместимость со вторым человеком")
         calc_synastry_action.triggered.connect(self._on_calculate_synastry)
         toolbar.addAction(calc_synastry_action)
-        transits_action = QAction("🌠 Транзиты", self)
+        transits_action = QAction("🌠 Транзиты дня", self)
         transits_action.setToolTip("Транзиты на дату и периоды действия")
         transits_action.triggered.connect(self._on_show_transits)
         toolbar.addAction(transits_action)
-        interp_action = QAction("📖 Разбор", self)
+        interp_action = QAction("📖 Анализ", self)
         interp_action.setToolTip("Интерпретации натала и транзитов")
         interp_action.triggered.connect(self._on_show_interpretation)
         toolbar.addAction(interp_action)
@@ -609,9 +609,12 @@ class MainWindow(QMainWindow):
         p = self._birth_input_panel
         settings.update({
             "show_planet_labels": p.chk_show_planet_labels.isChecked(),
-            "show_asteroid_labels": p.chk_show_asteroid_labels.isChecked(),
-            "show_node_labels": p.chk_show_node_labels.isChecked(),
+            "show_asteroid_labels": p.chk_chiron.isChecked(),
+            "show_node_labels": p.chk_nodes.isChecked(),
             "show_angle_labels": p.chk_show_angle_labels.isChecked(),
+            "text_chiron": p.chk_chiron.isChecked(),
+            "text_nodes": p.chk_nodes.isChecked(),
+            "text_fortune": p.chk_fortune.isChecked(),
         })
         return settings
             
@@ -933,6 +936,14 @@ class MainWindow(QMainWindow):
     def _on_show_interpretation(self):
         """Переключает на вкладку Разбор."""
         self.self._calc_tabs.setCurrentWidget(self._interpretation_panel)
+
+    def _show_tab(self, panel):
+        """Переключает на вкладку с панелью (надёжный поиск контейнера)."""
+        from PyQt6.QtWidgets import QTabWidget
+        for tabs in self.findChildren(QTabWidget):
+            if tabs.indexOf(panel) >= 0:
+                tabs.setCurrentWidget(panel)
+                return
 
     def _on_show_transits(self):
         """Переключает на вкладку Транзиты."""
