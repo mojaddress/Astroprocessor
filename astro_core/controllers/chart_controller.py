@@ -87,17 +87,8 @@ class ChartController:
         if display_profile_name:
             try:
                 profile = load_display_profile(display_profile_name)
-                ui_flags = {
-                    key: settings_dict[key]
-                    for key in (
-                        "include_chiron", "include_nodes",
-                        "include_part_of_fortune", "include_angles", "include_dsc",
-                    )
-                    if key in settings_dict
-                }
                 settings_dict = apply_profile_to_settings(profile, settings_dict)
                 # Галочки левой панели приоритетнее профиля отображения (итерация 20)
-                settings_dict.update(ui_flags)
             except FileNotFoundError:
                 pass  # Use settings as-is
 

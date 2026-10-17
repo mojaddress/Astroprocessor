@@ -51,6 +51,7 @@ class BirthInputPanel(QWidget):
     display_profile_apply_requested = pyqtSignal(str)
     display_profile_save_requested = pyqtSignal(str)
     recalc_triggered = pyqtSignal()
+    display_toggled = pyqtSignal()
     
     def __init__(
         self,
@@ -133,7 +134,8 @@ class BirthInputPanel(QWidget):
         city_layout.addLayout(source_layout)
         
         # City search
-        city_completer = CityCompleter(self._city_controller, self)
+        self.city_completer = CityCompleter(self._city_controller, self)
+
         
         self.combo_city = QComboBox()
         self.combo_city.setEditable(True)
@@ -237,15 +239,18 @@ class BirthInputPanel(QWidget):
         display_layout.addWidget(self.edit_display_profile_name)
         
         # Label visibility options
-        label_group = QGroupBox("Названия объектов (текст)")
+        label_group = QGroupBox("Названия на карте (текст)")
         label_layout = QGridLayout(label_group)
-        
         self.chk_show_planet_labels = QCheckBox("Планеты")
         self.chk_show_planet_labels.setChecked(True)
         label_layout.addWidget(self.chk_show_planet_labels, 0, 0)
-        self.chk_show_angle_labels = QCheckBox("ASC / MC")
-        self.chk_show_angle_labels.setChecked(True)
-        label_layout.addWidget(self.chk_show_angle_labels, 1, 1)
+        self.chk_zodiac = QCheckBox("Зодиак")
+        self.chk_zodiac.setChecked(False)
+        label_layout.addWidget(self.chk_zodiac, 0, 1)
+        self.lbl_zodiac_periods = QLabel("")
+        self.lbl_zodiac_periods.setWordWrap(True)
+        self.lbl_zodiac_periods.setVisible(False)
+        label_layout.addWidget(self.lbl_zodiac_periods, 1, 0, 1, 2)
         
         display_layout.addWidget(label_group)
         
@@ -298,7 +303,8 @@ class BirthInputPanel(QWidget):
         obj_layout.addWidget(self.chk_fortune, 0, 2)
         obj_layout.addWidget(self.chk_angles, 1, 0)
         obj_layout.addWidget(self.chk_dsc, 1, 1)
-        settings_layout.addRow("Объекты:", obj_layout)
+        settings_layout.addRow("Подписи и линии:", obj_layout)
+        self._connect_display_toggles()
         
         self.edit_ephe_path = QLineEdit("ephe")
         settings_layout.addRow("Путь к эфемеридам:", self.edit_ephe_path)
@@ -345,43 +351,53 @@ class BirthInputPanel(QWidget):
             elif hasattr(widget, 'stateChanged'):
                 widget.stateChanged.connect(self.recalc_triggered.emit)
                 
+    def _connect_display_toggles(self):
+        """Соединяет экранные тумблеры с сигналом живой перерисовки."""
+        for box in (self.chk_show_planet_labels, self.chk_zodiac,
+                    self.chk_chiron, self.chk_nodes, self.chk_fortune,
+                    self.chk_angles, self.chk_dsc):
+            box.stateChanged.connect(lambda _=0: self.display_toggled.emit())
+        self.chk_zodiac.stateChanged.connect(self._on_zodiac_toggled)
+
+    def _on_zodiac_toggled(self, _state=0):
+        """Периоды знаков для года из даты рождения."""
+        if not self.chk_zodiac.isChecked():
+            self.lbl_zodiac_periods.setVisible(False)
+            return
+        try:
+            from astro_core.zodiac_calendar import format_sign_periods, sign_periods
+            year = self.edit_birth_date.date().year()
+            self.lbl_zodiac_periods.setText(
+                f"Периоды знаков, {year}:\n" + format_sign_periods(sign_periods(year)))
+        except Exception as e:
+            self.lbl_zodiac_periods.setText(f"Периоды знаков недоступны: {e}")
+        self.lbl_zodiac_periods.setVisible(True)
     def _on_city_query_changed(self, text: str):
-        """Update city completer and combo when query changes."""
-        if text.strip():
-            cities = self._city_controller.search_cities(text, limit=20)
-        else:
-            cities = self._city_controller.get_all_cities()[:20]
-            
-        # Update completer
-        display_names = [self._city_controller.get_city_display_name(c) for c in cities]
-        model = QStringListModel(display_names, self)
-        self.city_completer.setModel(model)
-        
-        # Update combo box
-        self.combo_city.blockSignals(True)
-        self.combo_city.clear()
-        for name in display_names:
-            self.combo_city.addItem(name)
-        self.combo_city.blockSignals(False)
-        
+        """Город — один комбо: обновляем только модель подсказок."""
+        self.city_completer._update_model(text)
+
     def _populate_initial_cities(self):
-        """Populate city combo with initial cities on startup."""
+        """Заполняем комбо начальными городами, сигналы lineEdit заблокированы."""
         cities = self._city_controller.get_all_cities()[:20]
         display_names = [self._city_controller.get_city_display_name(c) for c in cities]
+        le = self.combo_city.lineEdit()
+        le.blockSignals(True)
         self.combo_city.blockSignals(True)
         self.combo_city.clear()
         for name in display_names:
             self.combo_city.addItem(name)
         self.combo_city.blockSignals(False)
-        
+        le.blockSignals(False)
+
     def _on_completer_activated(self, text: str):
-        """Handle completer selection - update combo box."""
-        self.combo_city.blockSignals(True)
-        self.combo_city.setCurrentText(text)
-        self.combo_city.blockSignals(False)
-        # Also trigger city selection logic
-        self._on_city_selected(self.combo_city.currentIndex())
-        
+        """Выбор из подсказок: применяем город и координаты."""
+        idx = self.combo_city.findText(text)
+        if idx < 0:
+            self.combo_city.insertItem(0, text)
+            idx = 0
+        self.combo_city.setCurrentIndex(idx)
+        self._on_city_selected(idx)
+
     def _load_profiles(self):
         """Load birth profiles into combo."""
         self.profile_combo.clear()
@@ -423,7 +439,7 @@ class BirthInputPanel(QWidget):
         if appearance:
             pairs = (
                 ("show_planet_labels", self.chk_show_planet_labels),
-                ("show_angle_labels", self.chk_show_angle_labels),
+                ("show_angle_labels", self.chk_angles),
             )
             for key, box in pairs:
                 if key in appearance:
@@ -552,7 +568,7 @@ class BirthInputPanel(QWidget):
             "show_planet_labels": self.chk_show_planet_labels.isChecked(),
             "show_asteroid_labels": self.chk_chiron.isChecked(),
             "show_node_labels": self.chk_nodes.isChecked(),
-            "show_angle_labels": self.chk_show_angle_labels.isChecked(),
+            "show_angle_labels": self.chk_angles.isChecked(),
             "ephe_path": self.edit_ephe_path.text() or None,
         }
         
