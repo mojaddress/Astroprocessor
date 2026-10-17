@@ -21,13 +21,13 @@ from astro_core.controllers import (
 )
 from astro_core.state import StateManager
 from astro_core.controllers.synastry_controller import SynastryController
+from astro_core.chart import build_natal_chart
+from astro_core.transits_daily import make_sky_birth_from_chart
 
-from PyQt6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
-    QMenuBar, QStatusBar, QToolBar, QTabWidget, QMessageBox,
-    QLabel, QProgressBar, QSizePolicy, QInputDialog,
-    QFileDialog, QInputDialog  # <-- ДОБАВИТЬ QFileDialog
-)
+
+
+
+
 
 # Import widgets
 from ui_qt.widgets import (
@@ -121,14 +121,14 @@ class MainWindow(QMainWindow):
         birth_scroll.setWidgetResizable(True)
         birth_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         birth_scroll.setWidget(self._birth_input_panel)
-        left_layout.addWidget(birth_scroll, 1)
+        left_layout.addWidget(birth_scroll, 3)
         
         # Load display profiles into birth input panel
         self._birth_input_panel._load_display_profiles()
         
         # Profile manager
         self._profile_manager = ProfileManager(self._profile_controller)
-        self._profile_manager.setMaximumHeight(80)
+        self._profile_manager.setMaximumHeight(112)
         left_layout.addWidget(self._profile_manager, 0)
         
         # CENTER PANE - Chart View (main focus)
@@ -226,6 +226,9 @@ class MainWindow(QMainWindow):
             if svg_content:
                 self._chart_view.set_svg(svg_content)
             self._chart_view.set_transit_data(transit_planets, transit_aspects)
+            self._last_transit_planets = transit_planets
+            self._last_transit_aspects = transit_aspects
+            self._chart_mode = "transit"
         except Exception as e:
             self._status_label.setText(f"Ошибка отображения транзитов: {str(e)}")
 
@@ -445,30 +448,19 @@ class MainWindow(QMainWindow):
         toolbar.addSeparator()
         
         # Transit toggle
-        self._toolbar_transit_toggle = QAction("📊 Транзиты на карте", self)
-        self._toolbar_transit_toggle.setCheckable(True)
-        self._toolbar_transit_toggle.setChecked(True)
-        self._toolbar_transit_toggle.setEnabled(False)
-        self._toolbar_transit_toggle.setToolTip("Показать/скрыть транзиты на натальной карте")
-        self._toolbar_transit_toggle.triggered.connect(self._toggle_transits)
-        toolbar.addAction(self._toolbar_transit_toggle)
         
         toolbar.addSeparator()
         
         # Panel visibility toggles
-        toggle_left_action = QAction("📋 Левая панель", self)
-        toggle_left_action.setCheckable(True)
-        toggle_left_action.setChecked(True)
-        toggle_left_action.setToolTip("Скрыть/показать левую панель (Ctrl+L)")
-        toggle_left_action.triggered.connect(self._toggle_left_panel)
-        toolbar.addAction(toggle_left_action)
+        directions_action = QAction("🌀 Дирекции", self)
+        directions_action.setToolTip("Дирекции солнечной дуги — в разработке")
+        directions_action.triggered.connect(self._on_directions_placeholder)
+        toolbar.addAction(directions_action)
         
-        toggle_right_action = QAction("📋 Правая панель", self)
-        toggle_right_action.setCheckable(True)
-        toggle_right_action.setChecked(True)
-        toggle_right_action.setToolTip("Скрыть/показать правую панель (Ctrl+R)")
-        toggle_right_action.triggered.connect(self._toggle_right_panel)
-        toolbar.addAction(toggle_right_action)
+        returns_action = QAction("☀️ Обращения", self)
+        returns_action.setToolTip("Солнечные обращения — в разработке")
+        returns_action.triggered.connect(self._on_returns_placeholder)
+        toolbar.addAction(returns_action)
         
     def _init_status_bar(self):
         """Initialize status bar."""
@@ -499,6 +491,7 @@ class MainWindow(QMainWindow):
         self._birth_input_panel.display_profile_apply_requested.connect(self._on_apply_display_profile)
         self._birth_input_panel.display_profile_save_requested.connect(self._on_save_display_profile)
         self._birth_input_panel.recalc_triggered.connect(self._on_recalculate_chart)
+        self._birth_input_panel.display_toggled.connect(self._rerender_current)
         
         # Transit panel signals
         self._transit_panel.calculate_requested.connect(self._handle_calculate_transits)
@@ -582,6 +575,7 @@ class MainWindow(QMainWindow):
                 svg_content = self._current_chart_result.get("svg", "")
                 if svg_content:
                     self._chart_view.set_svg(svg_content)
+                self._chart_mode = "natal"
                 chart_type = self._current_chart_result.get("chart_type", "Натальная карта")
                 name = self._current_birth_data.get("name", "Chart") if self._current_birth_data else ""
                 self._status_label.setText(f"{chart_type} - {name}")
@@ -609,9 +603,9 @@ class MainWindow(QMainWindow):
         p = self._birth_input_panel
         settings.update({
             "show_planet_labels": p.chk_show_planet_labels.isChecked(),
-            "show_asteroid_labels": p.chk_chiron.isChecked(),
-            "show_node_labels": p.chk_nodes.isChecked(),
-            "show_angle_labels": p.chk_show_angle_labels.isChecked(),
+            "show_sign_names": p.chk_zodiac.isChecked(),
+            "show_angle_labels": p.chk_angles.isChecked(),
+            "show_dsc": p.chk_dsc.isChecked(),
             "text_chiron": p.chk_chiron.isChecked(),
             "text_nodes": p.chk_nodes.isChecked(),
             "text_fortune": p.chk_fortune.isChecked(),
@@ -698,10 +692,12 @@ class MainWindow(QMainWindow):
         
     def _on_calculate_transits(self):
         """Handle calculate transits action."""
+        self._show_tab(self._transit_panel)
         self._transit_panel._on_calculate()
         
     def _on_calculate_progressions(self):
         """Handle calculate progressions action."""
+        self._show_tab(self._progression_panel)
         self._progression_panel._on_calculate()
         
     def _on_clear_results(self):
@@ -795,16 +791,12 @@ class MainWindow(QMainWindow):
         enabled = getattr(self, '_transit_available', False)
         if hasattr(self, '_transit_toggle_action'):
             self._transit_toggle_action.setEnabled(enabled)
-        if hasattr(self, '_toolbar_transit_toggle'):
-            self._toolbar_transit_toggle.setEnabled(enabled)
     
     def _toggle_transits(self, checked: bool):
         """Toggle transit display on chart."""
         self._show_transits = checked
         if hasattr(self, '_transit_toggle_action'):
             self._transit_toggle_action.setChecked(checked)
-        if hasattr(self, '_toolbar_transit_toggle'):
-            self._toolbar_transit_toggle.setChecked(checked)
         
         # Update chart view
         if self._current_chart_result and self._current_transit_result:
@@ -817,30 +809,36 @@ class MainWindow(QMainWindow):
         
         self._save_state()
     
+    def _on_directions_placeholder(self):
+        QMessageBox.information(self, "Дирекции",
+            "Дирекции солнечной дуги — функция в разработке.\n"
+            "Появится в итерации 27.")
+
+    def _on_returns_placeholder(self):
+        QMessageBox.information(self, "Обращения",
+            "Солнечные обращения (соляр) — функция в разработке.\n"
+            "Появится в итерации 28.")
+
     def _toggle_left_panel(self, checked: bool = None):
-        """Toggle left panel visibility."""
+        """Скрыть/показать левую панель (всегда инверсия)."""
         if hasattr(self, '_main_splitter'):
-            widget = self._main_splitter.widget(0)  # Left panel
+            widget = self._main_splitter.widget(0)
             if widget:
-                if checked is None:
-                    checked = not widget.isVisible()
-                widget.setVisible(checked)
+                widget.setVisible(not widget.isVisible())
+                self._show_left_panel = widget.isVisible()
                 if hasattr(self, '_toggle_left_panel_action'):
-                    self._toggle_left_panel_action.setChecked(checked)
+                    self._toggle_left_panel_action.setChecked(self._show_left_panel)
                 self._save_state()
-    
     def _toggle_right_panel(self, checked: bool = None):
-        """Toggle right panel visibility."""
+        """Скрыть/показать правую панель (всегда инверсия)."""
         if hasattr(self, '_main_splitter'):
-            widget = self._main_splitter.widget(2)  # Right panel (index 2 in 3-pane layout)
+            widget = self._main_splitter.widget(2)
             if widget:
-                if checked is None:
-                    checked = not widget.isVisible()
-                widget.setVisible(checked)
+                widget.setVisible(not widget.isVisible())
+                self._show_right_panel = widget.isVisible()
                 if hasattr(self, '_toggle_right_panel_action'):
-                    self._toggle_right_panel_action.setChecked(checked)
+                    self._toggle_right_panel_action.setChecked(self._show_right_panel)
                 self._save_state()
-    
     def _on_recalculate_chart(self):
         """Handle recalculate chart trigger."""
         if self._current_birth_data and self._current_chart_result:
@@ -935,7 +933,7 @@ class MainWindow(QMainWindow):
             
     def _on_show_interpretation(self):
         """Переключает на вкладку Разбор."""
-        self.self._calc_tabs.setCurrentWidget(self._interpretation_panel)
+        self._calc_tabs.setCurrentWidget(self._interpretation_panel)
 
     def _show_tab(self, panel):
         """Переключает на вкладку с панелью (надёжный поиск контейнера)."""
@@ -945,9 +943,23 @@ class MainWindow(QMainWindow):
                 tabs.setCurrentWidget(panel)
                 return
 
+    def _rerender_current(self):
+        """Мгновенная перерисовка текущего вида."""
+        mode = getattr(self, "_chart_mode", "natal")
+        if mode == "transit" and getattr(self, "_last_transit_planets", None) is not None:
+            self._chart_view.set_transit_chart_data(
+                self._current_chart_result, self._last_transit_planets,
+                self._last_transit_aspects, self._get_display_settings())
+        elif mode == "synastry" and getattr(self, "_last_synastry_chart_b", None) is not None:
+            self._chart_view.set_synastry_chart_data(
+                self._current_chart_result, self._last_synastry_chart_b,
+                self._last_synastry_aspects, self._get_display_settings())
+        else:
+            self._update_chart_view()
+
     def _on_show_transits(self):
         """Переключает на вкладку Транзиты."""
-        self.self._calc_tabs.setCurrentWidget(self._transits_panel)
+        self._calc_tabs.setCurrentWidget(self._transits_panel)
 
     def _on_calculate_synastry(self):
         """Переключает на вкладку синастрии и запускает расчёт."""
@@ -978,6 +990,9 @@ class MainWindow(QMainWindow):
                 self._current_chart_result, chart_b)
             self._current_synastry_result = result
             self._synastry_panel.set_results(result)
+            self._last_synastry_chart_b = chart_b
+            self._last_synastry_aspects = result.aspects
+            self._chart_mode = "synastry"
             self._chart_view.set_synastry_chart_data(
                 self._current_chart_result, chart_b, result.aspects,
                 self._get_display_settings())
