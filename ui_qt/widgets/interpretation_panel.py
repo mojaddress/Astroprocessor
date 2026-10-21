@@ -11,6 +11,7 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QTextBrowser,
     QFileDialog, QMessageBox, QLabel,
 )
+from PyQt6.QtCore import pyqtSignal
 
 from astro_core.interpretations import (
     DISCLAIMER, format_natal_profile, summarize_natal,
@@ -23,6 +24,8 @@ from astro_core.transits_daily import (
 
 class InterpretationPanel(QWidget):
     """Целостный разбор: натал, транзиты, опционально LLM."""
+
+    help_requested = pyqtSignal(str)
 
     def __init__(self, get_chart, get_sky, parent=None):
         super().__init__(parent)
@@ -47,6 +50,10 @@ class InterpretationPanel(QWidget):
         self.btn_save = QPushButton("💾 Отчёт")
         self.btn_save.clicked.connect(self._on_save)
         row.addWidget(self.btn_save)
+        self.btn_help = QPushButton("📖")
+        self.btn_help.setToolTip("База Знаний: Анализ")
+        self.btn_help.clicked.connect(lambda _=False: self.help_requested.emit("Анализ"))
+        row.addWidget(self.btn_help)
         layout.addLayout(row)
 
         self.lbl_hint = QLabel("")

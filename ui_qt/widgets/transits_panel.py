@@ -12,6 +12,7 @@ from PyQt6.QtWidgets import (
     QHeaderView, QFileDialog, QMessageBox,
 )
 from PyQt6.QtCore import QDate
+from PyQt6.QtCore import pyqtSignal
 
 from astro_core.constants import get_planet_name_ru
 from astro_core.interpretations import ASPECT_INFO, DISCLAIMER
@@ -20,6 +21,8 @@ from astro_core.transits_daily import scan_periods, summarize_transits, transit_
 
 class TransitsPanel(QWidget):
     """Транзиты на дату и периоды действия аспектов."""
+
+    help_requested = pyqtSignal(str)
 
     def __init__(self, get_chart, get_sky, parent=None):
         super().__init__(parent)
@@ -48,6 +51,10 @@ class TransitsPanel(QWidget):
         self.btn_calculate.setStyleSheet("font-weight: bold; padding: 6px;")
         self.btn_calculate.clicked.connect(self._on_calculate)
         gl.addWidget(self.btn_calculate)
+        self.btn_help = QPushButton("📖")
+        self.btn_help.setToolTip("База Знаний: Транзиты")
+        self.btn_help.clicked.connect(lambda _=False: self.help_requested.emit("Транзиты"))
+        gl.addWidget(self.btn_help)
         self.btn_save = QPushButton("💾 Отчёт")
         self.btn_save.clicked.connect(self._on_save)
         gl.addWidget(self.btn_save)

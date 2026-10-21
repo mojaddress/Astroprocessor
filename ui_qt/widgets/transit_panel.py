@@ -13,6 +13,7 @@ from typing import Optional, List, Dict, Any
 
 from astro_core.controllers import TransitController, CityController
 from astro_core.controllers.city_controller import City
+from .birth_input_panel import CityCompleter
 from astro_core.constants import DEFAULT_TRANSIT_PLANETS, ASPECT_DEFINITIONS
 
 
@@ -116,12 +117,11 @@ class TransitPanel(QWidget):
         source_layout.addWidget(self.radio_with_city)
         city_layout.addLayout(source_layout)
         
-        self.edit_transit_city_query = QLineEdit()
-        self.edit_transit_city_query.setPlaceholderText("Поиск города транзита...")
-        city_layout.addWidget(self.edit_transit_city_query)
+        self._transit_city_completer = CityCompleter(self._city_controller, self)
         
         self.combo_transit_city = QComboBox()
-        self.combo_transit_city.setEditable(False)
+        self.combo_transit_city.setEditable(True)
+        self.combo_transit_city.setCompleter(self._transit_city_completer)
         self.combo_transit_city.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.combo_transit_city.setMinimumContentsLength(20)
         city_layout.addWidget(self.combo_transit_city)
@@ -195,7 +195,8 @@ class TransitPanel(QWidget):
         
         self.radio_no_city.toggled.connect(self._on_transit_city_mode_changed)
         self.radio_with_city.toggled.connect(self._on_transit_city_mode_changed)
-        self.edit_transit_city_query.textChanged.connect(self._on_transit_city_query_changed)
+        self.combo_transit_city.lineEdit().textChanged.connect(self._on_transit_city_query_changed)
+        self._transit_city_completer.activated.connect(self._on_transit_city_completer_activated)
         self.combo_transit_city.currentIndexChanged.connect(self._on_transit_city_selected)
         # Connect completer activated signal (if using completer)
         
@@ -214,7 +215,6 @@ class TransitPanel(QWidget):
             
     def _on_transit_city_mode_changed(self):
         use_city = self.radio_with_city.isChecked()
-        self.edit_transit_city_query.setEnabled(use_city)
         self.combo_transit_city.setEnabled(use_city)
         self.lbl_transit_city_info.setVisible(use_city)
         
@@ -227,17 +227,17 @@ class TransitPanel(QWidget):
             self._on_calculate()
         
     def _on_transit_city_query_changed(self, text: str):
-        if text.strip():
-            cities = self._city_controller.search_cities(text, limit=20)
-        else:
-            cities = self._city_controller.get_all_cities()[:20]
-            
-        self.combo_transit_city.clear()
-        for c in cities:
-            self.combo_transit_city.addItem(
-                self._city_controller.get_city_display_name(c)
-            )
-            
+        """Одна строка-комбо: обновляем только модель подсказок (без перестройки комбо)."""
+        self._transit_city_completer._update_model(text)
+
+    def _on_transit_city_completer_activated(self, text: str):
+        """Выбор из подсказок: применяем город и координаты."""
+        idx = self.combo_transit_city.findText(text)
+        if idx < 0:
+            self.combo_transit_city.insertItem(0, text)
+            idx = 0
+        self.combo_transit_city.setCurrentIndex(idx)
+        self._on_transit_city_selected(idx)
     def _populate_initial_transit_cities(self):
         """Populate transit city combo with initial cities on startup."""
         cities = self._city_controller.get_all_cities()[:20]

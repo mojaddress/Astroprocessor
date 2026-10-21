@@ -84,11 +84,12 @@ class BirthInputPanel(QWidget):
         self.btn_load_profile = QPushButton("📂 Загрузить")
         self.btn_edit_profile = QPushButton("✏️ Редакт.")
         self.btn_delete_profile = QPushButton("🗑️ Удалить")
-        self.chk_confirm_delete = QCheckBox("Подтвердить удаление")
         
         btn_layout.addWidget(self.btn_load_profile)
         btn_layout.addWidget(self.btn_edit_profile)
-        btn_layout.addWidget(self.chk_confirm_delete)
+        self.btn_save_profile = QPushButton("💾 Сохранить")
+        btn_layout.addWidget(self.btn_save_profile)
+        self.btn_save_profile.clicked.connect(lambda: self.profile_save_requested.emit(None))
         btn_layout.addWidget(self.btn_delete_profile)
         profiles_layout.addLayout(btn_layout)
         
@@ -242,7 +243,7 @@ class BirthInputPanel(QWidget):
         label_group = QGroupBox("Названия на карте (текст)")
         label_layout = QGridLayout(label_group)
         self.chk_show_planet_labels = QCheckBox("Планеты")
-        self.chk_show_planet_labels.setChecked(True)
+        self.chk_show_planet_labels.setChecked(False)
         label_layout.addWidget(self.chk_show_planet_labels, 0, 0)
         self.chk_zodiac = QCheckBox("Зодиак")
         self.chk_zodiac.setChecked(False)
@@ -288,11 +289,11 @@ class BirthInputPanel(QWidget):
         settings_layout.addRow("Аянамша:", self.combo_ayanamsha)
         
         self.chk_chiron = QCheckBox("Хирон")
-        self.chk_chiron.setChecked(True)
+        self.chk_chiron.setChecked(False)
         self.chk_nodes = QCheckBox("Лунные узлы")
-        self.chk_nodes.setChecked(True)
+        self.chk_nodes.setChecked(False)
         self.chk_fortune = QCheckBox("Фортуна")
-        self.chk_fortune.setChecked(True)
+        self.chk_fortune.setChecked(False)
         self.chk_angles = QCheckBox("ASC/MC")
         self.chk_angles.setChecked(True)
         self.chk_dsc = QCheckBox("DSC")
@@ -493,22 +494,12 @@ class BirthInputPanel(QWidget):
         self._sync_city_info()
             
     def _on_delete_profile(self):
+        """Удаление профиля: подтверждение диалогом Подтвердить/Отменить."""
         name = self.profile_combo.currentText()
         if not name:
             return
-        if not self.chk_confirm_delete.isChecked():
-            QMessageBox.warning(self, "Подтверждение", "Поставьте галочку 'Подтвердить удаление'")
-            return
-            
-        reply = QMessageBox.question(
-            self, "Удалить профиль",
-            f"Удалить профиль '{name}'?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-        )
-        if reply == QMessageBox.StandardButton.Yes:
-            self.profile_delete_requested.emit(name)
-            self.chk_confirm_delete.setChecked(False)
-            
+        self.profile_delete_requested.emit(name)
+
     def _on_cancel_edit(self):
         self._editing_profile_name = None
         self.btn_save_profile.setVisible(True)

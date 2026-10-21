@@ -4,7 +4,8 @@ Main Window - PyQt6 desktop application main window.
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QMenuBar, QStatusBar, QToolBar, QTabWidget, QMessageBox,
-    QLabel, QProgressBar, QSizePolicy, QInputDialog
+    QLabel, QProgressBar, QSizePolicy, QInputDialog,
+    QFileDialog,
 )
 from PyQt6.QtWidgets import QScrollArea
 from PyQt6.QtCore import Qt, pyqtSlot, QSize
@@ -41,6 +42,7 @@ from ui_qt.widgets import (
     SynastryPanel,
     TransitsPanel,
     InterpretationPanel,
+    DirectionsPanel,
 )
 from ui_qt.models.chart_model import (
     create_model_for_objects,
@@ -161,9 +163,11 @@ class MainWindow(QMainWindow):
         self._interpretation_panel = InterpretationPanel(
             lambda: self._current_chart_result,
             lambda chart, d: build_natal_chart(make_sky_birth_from_chart(chart, d)))
+        self._directions_panel = DirectionsPanel()
         self._calc_tabs.addTab(self._synastry_panel, "Синастрия")
         self._calc_tabs.addTab(self._transits_panel, "🌠 Транзиты дня")
         self._calc_tabs.addTab(self._interpretation_panel, "📖 Анализ")
+        self._calc_tabs.addTab(self._directions_panel, "🌀 Дирекции")
         
         right_layout.addWidget(self._calc_tabs)
         
@@ -378,6 +382,14 @@ class MainWindow(QMainWindow):
         display_menu.addAction(self._toggle_right_panel_action)
         
         # Help menu
+        kb_menu = menubar.addMenu("База знаний")
+        kb_open = QAction("📚 Открыть Базу Знаний", self)
+        kb_open.setShortcut(QKeySequence("F1"))
+        kb_open.triggered.connect(lambda _=False: self._open_knowledge(""))
+        kb_menu.addAction(kb_open)
+        kb_gloss = QAction("📖 Глоссарий", self)
+        kb_gloss.triggered.connect(lambda _=False: self._open_knowledge("GLOSSARY"))
+        kb_menu.addAction(kb_gloss)
         help_menu = menubar.addMenu("&Помощь")
         
         about_action = QAction("&О программе", self)
@@ -427,15 +439,7 @@ class MainWindow(QMainWindow):
         toolbar.addSeparator()
         
         # Profile buttons
-        load_profile_action = QAction("📂 Загрузить профиль", self)
-        load_profile_action.setToolTip("Загрузить профиль рождения")
-        load_profile_action.triggered.connect(self._on_load_profile)
-        toolbar.addAction(load_profile_action)
         
-        save_profile_action = QAction("💾 Сохранить профиль", self)
-        save_profile_action.setToolTip("Сохранить профиль рождения")
-        save_profile_action.triggered.connect(self._on_save_profile)
-        toolbar.addAction(save_profile_action)
         
         toolbar.addSeparator()
         
@@ -453,7 +457,7 @@ class MainWindow(QMainWindow):
         
         # Panel visibility toggles
         directions_action = QAction("🌀 Дирекции", self)
-        directions_action.setToolTip("Дирекции солнечной дуги — в разработке")
+        directions_action.setToolTip("Дирекции солнечной дуги")
         directions_action.triggered.connect(self._on_directions_placeholder)
         toolbar.addAction(directions_action)
         
@@ -499,6 +503,7 @@ class MainWindow(QMainWindow):
         # Progression panel signals
         self._progression_panel.calculate_requested.connect(self._handle_calculate_progressions)
         self._synastry_panel.calculate_requested.connect(self._handle_calculate_synastry)
+        self._directions_panel.calculate_requested.connect(self._handle_calculate_directions)
         
         # Profile manager signals
         self._profile_manager.profile_selected.connect(self._on_profile_selected)
@@ -507,6 +512,11 @@ class MainWindow(QMainWindow):
         
         # Chart view signals
         self._chart_view.chart_clicked.connect(self._on_chart_clicked)
+        self._chart_view.kb_topic.connect(self._open_knowledge)
+        self._directions_panel.help_requested.connect(self._open_knowledge)
+        self._transits_panel.help_requested.connect(self._open_knowledge)
+        self._synastry_panel.help_requested.connect(self._open_knowledge)
+        self._interpretation_panel.help_requested.connect(self._open_knowledge)
         
     def _load_state(self):
         """Load application state."""
@@ -531,28 +541,6 @@ class MainWindow(QMainWindow):
         # Apply display profile to chart view settings
         self._update_chart_view_settings()
 
-    def _get_display_settings(self) -> dict:
-        """Получает текущие настройки отображения."""
-        try:
-            from astro_core.display_profiles import load_display_profile, get_render_kwargs
-            
-            if self._current_display_profile_name:
-                profile = load_display_profile(self._current_display_profile_name)
-                return get_render_kwargs(profile)
-        except Exception:
-            pass
-        
-        # Настройки по умолчанию
-        return {
-            "show_planet_labels": True,
-            "show_asteroid_labels": True,
-            "show_node_labels": True,
-            "show_angle_labels": True,
-            "show_houses": True,
-            "show_aspects": True,
-            "label_mode": "symbols",
-        }
-        
     def _save_state(self):
         """Save application state."""
         state = self._state_manager.state
@@ -637,7 +625,7 @@ class MainWindow(QMainWindow):
     def _set_right_panel_visible(self, visible: bool):
         """Show or hide right panel."""
         if hasattr(self, '_main_splitter'):
-            widget = self._main_splitter.widget(1)  # Right panel
+            widget = self._main_splitter.widget(2)  # Right panel
             if widget:
                 widget.setVisible(visible)
                 self._show_right_panel = visible
@@ -743,7 +731,7 @@ class MainWindow(QMainWindow):
 
     def _on_export_png(self):
         """Экспорт текущей карты в PNG высокого разрешения."""
-        if not self._chart_data:
+        if not self._current_chart_result:
             QMessageBox.warning(self, "Предупреждение", "Сначала рассчитайте карту")
             return
         
@@ -810,9 +798,9 @@ class MainWindow(QMainWindow):
         self._save_state()
     
     def _on_directions_placeholder(self):
-        QMessageBox.information(self, "Дирекции",
-            "Дирекции солнечной дуги — функция в разработке.\n"
-            "Появится в итерации 27.")
+        """Открывает вкладку дирекций и запускает расчёт."""
+        self._show_tab(self._directions_panel)
+        self._directions_panel._on_calculate()
 
     def _on_returns_placeholder(self):
         QMessageBox.information(self, "Обращения",
@@ -839,11 +827,6 @@ class MainWindow(QMainWindow):
                 if hasattr(self, '_toggle_right_panel_action'):
                     self._toggle_right_panel_action.setChecked(self._show_right_panel)
                 self._save_state()
-    def _on_recalculate_chart(self):
-        """Handle recalculate chart trigger."""
-        if self._current_birth_data and self._current_chart_result:
-            self._on_calculate_chart()
-            
     # ============================================================
     # Calculation Handler Methods
     # ============================================================
@@ -943,6 +926,12 @@ class MainWindow(QMainWindow):
                 tabs.setCurrentWidget(panel)
                 return
 
+    def _open_knowledge(self, query=""):
+        """Открывает диалог Базы Знаний с запросом."""
+        from ui_qt.widgets.knowledge_dialog import KnowledgeDialog
+        dlg = KnowledgeDialog(self, initial_query=str(query or ""))
+        dlg.exec()
+
     def _rerender_current(self):
         """Мгновенная перерисовка текущего вида."""
         mode = getattr(self, "_chart_mode", "natal")
@@ -954,6 +943,11 @@ class MainWindow(QMainWindow):
             self._chart_view.set_synastry_chart_data(
                 self._current_chart_result, self._last_synastry_chart_b,
                 self._last_synastry_aspects, self._get_display_settings())
+        elif mode == "directions" and getattr(self, "_last_directions", None) is not None:
+            result, d = self._last_directions
+            self._chart_view.set_directions_chart_data(
+                self._current_chart_result, result["planets"], result["aspects"],
+                d, self._get_display_settings())
         else:
             self._update_chart_view()
 
@@ -1002,6 +996,31 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Ошибка синастрии",
                                  f"Не удалось рассчитать совместимость:\n{str(e)}")
+        finally:
+            self._hide_progress()
+
+    def _handle_calculate_directions(self, target_date):
+        """Рассчитывает дирекции солнечной дуги на дату."""
+        if not self._current_chart_result:
+            QMessageBox.warning(self, "Предупреждение",
+                                "Сначала рассчитайте натальную карту")
+            return
+        self._show_progress("Расчёт дирекций...")
+        try:
+            from astro_core.directions import calculate_directions
+            result = calculate_directions(self._current_chart_result, target_date)
+            self._current_directions_result = result
+            self._directions_panel.set_results(result)
+            self._chart_view.set_directions_chart_data(
+                self._current_chart_result, result["planets"], result["aspects"],
+                target_date, self._get_display_settings())
+            self._last_directions = (result, target_date)
+            self._chart_mode = "directions"
+            self._status_label.setText(
+                f"Дирекции на {target_date}: дуга {result['arc']:.2f}°")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка дирекций",
+                                 f"Не удалось рассчитать дирекции:\n{str(e)}")
         finally:
             self._hide_progress()
 
@@ -1109,10 +1128,10 @@ class MainWindow(QMainWindow):
             self,
             "Удалить профиль",
             f"Удалить профиль '{profile_name}'?",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
         )
         
-        if reply == QMessageBox.StandardButton.Yes:
+        if reply == QMessageBox.StandardButton.Ok:
             try:
                 self._profile_controller.delete_profile(profile_name)
                 self._status_label.setText(f"Профиль удален: {profile_name}")
@@ -1141,13 +1160,6 @@ class MainWindow(QMainWindow):
         try:
             self._display_profile_controller.set_current_profile(profile_name)
             self._current_display_profile_name = profile_name
-            try:
-                from astro_core.display_profiles import load_display_profile
-                profile = load_display_profile(profile_name)
-                self._birth_input_panel.set_object_flags(
-                    profile.get("objects", {}), profile.get("appearance", {}))
-            except Exception:
-                pass
             
             # Update chart view with new appearance
             self._update_chart_view_settings()

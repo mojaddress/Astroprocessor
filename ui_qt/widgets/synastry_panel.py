@@ -19,7 +19,8 @@ from astro_core.interpretations import ASPECT_INFO, DISCLAIMER, summarize_synast
 class SynastryPanel(QWidget):
     """Панель синастрии: выбор второго человека и результаты."""
 
-    calculate_requested = pyqtSignal(str)  # имя профиля второго человека
+    calculate_requested = pyqtSignal(str)
+    help_requested = pyqtSignal(str)  # имя профиля второго человека
 
     def __init__(self, profile_controller, parent=None):
         super().__init__(parent)
@@ -49,6 +50,10 @@ class SynastryPanel(QWidget):
         self.btn_calculate.setStyleSheet("font-weight: bold; padding: 6px;")
         self.btn_calculate.clicked.connect(self._on_calculate)
         gl.addWidget(self.btn_calculate)
+        self.btn_help = QPushButton("📖")
+        self.btn_help.setToolTip("База Знаний: Синастрия")
+        self.btn_help.clicked.connect(lambda _=False: self.help_requested.emit("Синастрия"))
+        gl.addWidget(self.btn_help)
 
         self.lbl_score = QLabel("Оценка: —")
         self.lbl_score.setStyleSheet("font-size: 14px; font-weight: bold;")
