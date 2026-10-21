@@ -66,6 +66,7 @@ def _angular_diff(a, b):
 
 class ChartView(QGraphicsView):
     chart_clicked = pyqtSignal(QPointF)
+    kb_topic = pyqtSignal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -78,12 +79,14 @@ class ChartView(QGraphicsView):
         self._synastry_aspects = []
         self._is_transit_mode = False
         self._is_synastry_mode = False
+        self._is_directions_mode = False
+        self._directions_date = None
         self._svg_content = ""
         self._settings = {
-            "show_planet_labels": True, "show_sign_names": False,
+            "show_planet_labels": False, "show_sign_names": False,
             "show_houses": True, "show_aspects": True, "show_legend": True,
             "show_angle_labels": True, "show_dsc": True,
-            "text_chiron": True, "text_nodes": True, "text_fortune": True,
+            "text_chiron": False, "text_nodes": False, "text_fortune": False,
             "label_mode": "symbols",
             "planet_colors": {}, "aspect_colors": {}, "planet_dot_size": 6,
         }
@@ -99,6 +102,7 @@ class ChartView(QGraphicsView):
         self._chart_data = chart_data
         self._is_transit_mode = False
         self._is_synastry_mode = False
+        self._is_directions_mode = False
         if display_settings:
             self._settings.update(display_settings)
         self._rebuild()
@@ -110,6 +114,7 @@ class ChartView(QGraphicsView):
         self._transit_aspects = transit_aspects or []
         self._is_transit_mode = True
         self._is_synastry_mode = False
+        self._is_directions_mode = False
         if display_settings:
             self._settings.update(display_settings)
         self._rebuild()
@@ -121,6 +126,24 @@ class ChartView(QGraphicsView):
         self._synastry_aspects = synastry_aspects or []
         self._is_transit_mode = False
         self._is_synastry_mode = True
+        self._is_directions_mode = False
+        if display_settings:
+            self._settings.update(display_settings)
+        self._rebuild()
+
+    def set_directions_chart_data(self, natal_chart, dir_planets, dir_aspects,
+                                  directions_date=None, display_settings=None):
+        """Двухкруговая карта дирекций: натал внутри, дирекции снаружи."""
+        self._chart_data = natal_chart
+        self._transit_planets = dir_planets or []
+        self._transit_aspects = [
+            {"transit_planet": a["dir_planet"], "natal_point": a["natal_point"],
+             "aspect": a["aspect"], "orb": a["orb"]} for a in (dir_aspects or [])
+        ]
+        self._is_transit_mode = True
+        self._is_synastry_mode = False
+        self._is_directions_mode = True
+        self._directions_date = directions_date
         if display_settings:
             self._settings.update(display_settings)
         self._rebuild()
@@ -196,6 +219,7 @@ class ChartView(QGraphicsView):
         tr = QTransform().translate(x - box / 2, y - box / 2).scale(k, k)
         item = self._scene.addPath(tr.map(path), self._pen(color, GLYPH_STROKE * k))
         item.setZValue(5)
+        item.setData(0, f"planet-{name.lower()}")
         if tooltip:
             item.setToolTip(tooltip)
         for rect in fills:
@@ -273,6 +297,7 @@ class ChartView(QGraphicsView):
                                                 2 * dot_r, 2 * dot_r), dot_pen, QBrush(color))
             dot.setZValue(4)
             dot.setToolTip(tip)
+            dot.setData(0, f"planet-{name.lower()}")
             dot.setAcceptHoverEvents(True)
             label_radius = dot_radius + label_offset
             for attempt in range(5):
@@ -342,12 +367,14 @@ class ChartView(QGraphicsView):
                 np_ = lon_to_point(b + 15.0, mid_r - 9, c)
                 t2 = self._text(np_.x(), np_.y(), SIGN_NAMES_RU[sign], 8, "#444444")
                 t1.setToolTip(tip)
+                t1.setData(0, f"sign-{sign.lower()}")
                 t2.setToolTip(tip)
             else:
                 mp = lon_to_point(b + 15.0, mid_r, c)
                 t1 = self._text(mp.x(), mp.y(), SIGN_SYMBOLS[sign], font_size,
                                 "#1a1a1a", symbol=True)
                 t1.setToolTip(tip)
+                t1.setData(0, f"sign-{sign.lower()}")
             path = QPainterPath()
             outer = [lon_to_point(b + t, r_out, c) for t in range(0, 31, 3)]
             inner = [lon_to_point(b + t, r_in, c) for t in range(30, -1, -3)]
@@ -361,6 +388,7 @@ class ChartView(QGraphicsView):
                                        QBrush(QColor(0, 0, 0, 0)))
             item.setToolTip(tip)
             item.setZValue(1)
+            item.setData(0, f"sign-{sign.lower()}")
     def _draw_houses(self, houses, r_in, r_out):
         if not houses or not self._settings["show_houses"]:
             return
@@ -393,14 +421,16 @@ class ChartView(QGraphicsView):
             p1, p2 = lon_to_point(lon, r_from, c), lon_to_point(lon, r_to, c)
             self._scene.addLine(p1.x(), p1.y(), p2.x(), p2.y(), self._pen(color, 2.5))
             tp = lon_to_point(lon, r_to + SCENE_SIZE * 0.04, c)
-            self._text(tp.x(), tp.y(), name, 16, color)
+            titem = self._text(tp.x(), tp.y(), name, 16, color)
+            titem.setData(0, "angles")
 
     def _add_aspect_line(self, p1, p2, aspect, color, width, dash=False,
                          opacity=0.7, tooltip=""):
         if aspect == "conjunction":
+            width = max(width, 2.2)
             c = SCENE_SIZE / 2
             mid = QPointF((p1.x() + p2.x()) / 2, (p1.y() + p2.y()) / 2)
-            ctrl = QPointF(mid.x() + (c - mid.x()) * 0.35, mid.y() + (c - mid.y()) * 0.35)
+            ctrl = QPointF(mid.x() + (c - mid.x()) * 0.12, mid.y() + (c - mid.y()) * 0.12)
             path = QPainterPath(p1)
             path.quadTo(ctrl, p2)
             item = self._scene.addPath(path, self._pen(color, width, dash))
@@ -410,6 +440,7 @@ class ChartView(QGraphicsView):
         if tooltip:
             item.setToolTip(tooltip)
         item.setOpacity(opacity)
+        item.setData(0, f"aspect-{aspect}")
         return item
 
     def _draw_aspects(self, aspects, positions, dash=False, opacity=0.7):
@@ -488,7 +519,11 @@ class ChartView(QGraphicsView):
         c = SCENE_SIZE / 2
         s = SCENE_SIZE
         r_tr, r_nat, r_asp = s * 0.360, s * 0.280, s * 0.240
-        self._draw_title(f"Транзитная карта: {self._chart_data.get('birth', {}).get('name', 'Карта')}")
+        if getattr(self, "_is_directions_mode", False):
+            dstr = self._directions_date.strftime("%Y-%m-%d") if self._directions_date else ""
+            self._draw_title(f"Дирекции: {self._chart_data.get('birth', {}).get('name', 'Карта')} на {dstr}")
+        else:
+            self._draw_title(f"Транзитная карта: {self._chart_data.get('birth', {}).get('name', 'Карта')}")
         for r, col, w, dash in ((s * R_OUTER, "#000000", 2.0, False),
                                 (s * R_ZODIAC, "#000000", 1.0, False),
                                 (r_tr, "#000000", 0.6, True),
@@ -502,7 +537,6 @@ class ChartView(QGraphicsView):
         pof = self._draw_point_of_fortune(self._chart_data.get("additional_points", []), r_nat, 5, 22)
         if pof is not None:
             nat_pos["PartOfFortune"] = pof
-        self._draw_aspects(self._chart_data.get("aspects", []), nat_pos, opacity=0.6)
         for a in self._transit_aspects:
             tp, np_ = a.get("transit_planet"), a.get("natal_point")
             if tp in tr_pos and np_ in nat_pos:
@@ -573,7 +607,12 @@ class ChartView(QGraphicsView):
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
-            self.chart_clicked.emit(self.mapToScene(event.pos()))
+            pos = self.mapToScene(event.pos())
+            self.chart_clicked.emit(pos)
+            item = self._scene.itemAt(pos, QTransform())
+            topic = item.data(0) if item is not None else None
+            if topic:
+                self.kb_topic.emit(str(topic))
         super().mousePressEvent(event)
 
     def keyPressEvent(self, event):

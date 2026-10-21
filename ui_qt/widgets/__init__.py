@@ -12,6 +12,8 @@ from .city_selector import CitySelector
 from .synastry_panel import SynastryPanel
 from .transits_panel import TransitsPanel
 from .interpretation_panel import InterpretationPanel
+from .directions_panel import DirectionsPanel
+from .knowledge_dialog import KnowledgeDialog
 
 __all__ = [
     "ChartView",
@@ -24,4 +26,5 @@ __all__ = [
     "SynastryPanel",
     "TransitsPanel",
     "InterpretationPanel",
+    "DirectionsPanel",
 ]
