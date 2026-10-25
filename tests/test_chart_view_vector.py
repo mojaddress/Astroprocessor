@@ -149,3 +149,38 @@ def test_text_names_appear_with_flag(app):
     view = ChartView()
     view.set_chart_data(_chart_data(), {"text_chiron": True})
     assert any("Хирон" in t for t in _texts(view))
+
+
+def test_house_roman_and_degree_labels():
+    data = _chart_data()
+    data["houses"] = [{"house": 1, "longitude": 10.0},
+                      {"house": 2, "longitude": 40.0}]
+    view = ChartView()
+    view.set_chart_data(data, {})
+    texts = _texts(view)
+    assert "I" in texts and "II" in texts
+    assert any(t.strip().isdigit() for t in texts)
+
+
+def test_start_dsc_rotation_builds():
+    data = _chart_data()
+    data["additional_points"] = [{"name": "DSC", "longitude": 180.0}]
+    view = ChartView()
+    view.set_chart_data(data, {"start_dsc": True})
+    assert len(_texts(view)) > 0
+    view.set_chart_data(data, {"start_dsc": False})
+    assert len(_texts(view)) > 0
+
+
+def test_cross_glyph_and_label():
+    data = _chart_data()
+    data["additional_points"] = [
+        {"name": "CrossOfFate", "longitude": 100.0, "sign": "Libra",
+         "degree_in_sign": 10.0, "house": 3, "type": "point"},
+    ]
+    view = ChartView()
+    view.set_chart_data(data, {"text_cross": True})
+    assert "Крест" in _texts(view)
+    view2 = ChartView()
+    view2.set_chart_data(data, {"text_cross": False})
+    assert "Крест" not in _texts(view2)

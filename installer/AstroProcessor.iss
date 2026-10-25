@@ -1,0 +1,1 @@
+D:\Astro\installer\AstroProcessor.iss

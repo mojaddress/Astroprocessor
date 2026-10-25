@@ -9,7 +9,7 @@ from .ephemeris import (
     initialize_ephemeris,
     SWISSEPH_AVAILABLE,
 )
-from .points import is_day_chart, part_of_fortune
+from .points import is_day_chart, part_of_fortune, cross_of_fate
 from .utils import normalize_longitude, sign_from_longitude, house_for_longitude
 from .aspects import calculate_aspects
 
@@ -293,6 +293,20 @@ def build_natal_chart(birth, settings=None):
 
                 all_objects.append(pof_object)
                 additional_points.append(pof_object)
+                if settings.get("include_cross_of_fate", True):
+                    cross_longitude = cross_of_fate(sun["longitude"], moon["longitude"])
+                    c_sign, c_degree = sign_from_longitude(cross_longitude)
+                    cross_object = {
+                        "name": "CrossOfFate",
+                        "longitude": round(cross_longitude, 6),
+                        "sign": c_sign,
+                        "degree_in_sign": round(c_degree, 6),
+                        "house": house_for_longitude(cusp_longitudes, cross_longitude),
+                        "type": "point",
+                    }
+                    all_objects.append(cross_object)
+                    additional_points.append(cross_object)
+
 
     aspects = []
 

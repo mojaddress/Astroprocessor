@@ -145,6 +145,7 @@ class DisplayProfileEditor(QWidget):
         self.chk_nodes = QCheckBox("Лунные узлы (Раху/Кету)")
         self.chk_nodes.setChecked(True)
         self.chk_fortune = QCheckBox("Part of Fortune (Парс Фортуны)")
+        self.chk_cross = QCheckBox("Крест")
         self.chk_fortune.setChecked(True)
         self.chk_angles = QCheckBox("ASC / MC (Углы)")
         self.chk_angles.setChecked(True)
@@ -152,6 +153,7 @@ class DisplayProfileEditor(QWidget):
         special_layout.addWidget(self.chk_chiron)
         special_layout.addWidget(self.chk_nodes)
         special_layout.addWidget(self.chk_fortune)
+        special_layout.addWidget(self.chk_cross)
         special_layout.addWidget(self.chk_angles)
         
         layout.addWidget(special_group)
@@ -339,6 +341,7 @@ class DisplayProfileEditor(QWidget):
         self.chk_chiron.setChecked(objects.get("Chiron", True))
         self.chk_nodes.setChecked(objects.get("LunarNodes", True))
         self.chk_fortune.setChecked(objects.get("PartOfFortune", True))
+        self.chk_cross.setChecked(objects.get("CrossOfFate", True))
         self.chk_angles.setChecked(objects.get("Angles", True))
         
         # Aspects
@@ -380,6 +383,7 @@ class DisplayProfileEditor(QWidget):
         objects["Chiron"] = self.chk_chiron.isChecked()
         objects["LunarNodes"] = self.chk_nodes.isChecked()
         objects["PartOfFortune"] = self.chk_fortune.isChecked()
+        objects["CrossOfFate"] = self.chk_cross.isChecked()
         objects["Angles"] = self.chk_angles.isChecked()
         
         # Aspects

@@ -87,13 +87,10 @@ class BirthInputPanel(QWidget):
         
         btn_layout.addWidget(self.btn_load_profile)
         btn_layout.addWidget(self.btn_edit_profile)
-        self.btn_save_profile = QPushButton("💾 Сохранить")
-        btn_layout.addWidget(self.btn_save_profile)
-        self.btn_save_profile.clicked.connect(lambda: self.profile_save_requested.emit(None))
         btn_layout.addWidget(self.btn_delete_profile)
         profiles_layout.addLayout(btn_layout)
         
-        layout.addWidget(profiles_group)
+        layout.addWidget(profiles_group, 1)
         
         # --- Birth Data Group ---
         birth_group = QGroupBox("📅 Данные рождения")
@@ -115,7 +112,7 @@ class BirthInputPanel(QWidget):
         date_layout.addWidget(self.edit_birth_time)
         birth_layout.addRow("Дата / Время:", date_layout)
         
-        layout.addWidget(birth_group)
+        layout.addWidget(birth_group, 1)
         
         # --- City Selection Group ---
         city_group = QGroupBox("🏙️ Город рождения")
@@ -155,7 +152,6 @@ class BirthInputPanel(QWidget):
         self.manual_coords_header.setChecked(False)
         self.manual_coords_header.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         self.manual_coords_header.setStyleSheet("QToolButton { text-align: left; font-weight: bold; }")
-        city_layout.addWidget(self.manual_coords_header)
         
         manual_widget = QWidget()
         manual_layout = QFormLayout(manual_widget)
@@ -196,13 +192,22 @@ class BirthInputPanel(QWidget):
         manual_layout.addRow("UTC (ч):", self.spin_utc_offset)
         
         manual_widget.setVisible(False)
+        self.btn_save_profile = QPushButton("💾 Сохранить профиль")
+        self.btn_save_profile.setFixedHeight(26)
+        self.manual_coords_header.setFixedHeight(26)
+        manual_row = QGridLayout()
+        manual_row.addWidget(self.manual_coords_header, 0, 0)
+        manual_row.addWidget(self.btn_save_profile, 0, 1)
+        manual_row.setColumnStretch(0, 1)
+        manual_row.setColumnStretch(1, 1)
+        city_layout.addLayout(manual_row)
         city_layout.addWidget(manual_widget)
         self.manual_widget = manual_widget
         
         # Connect toggle
         self.manual_coords_header.toggled.connect(self._on_manual_coords_toggled)
         
-        layout.addWidget(city_group)
+        layout.addWidget(city_group, 1)
         
         # Connect signals for city/manual toggle
         self.radio_city.toggled.connect(self._on_coord_source_changed)
@@ -215,12 +220,10 @@ class BirthInputPanel(QWidget):
         self._populate_initial_cities()
         
         # --- Save Profile Buttons ---
-        self.btn_save_profile = QPushButton("💾 Сохранить как профиль")
         self.btn_save_changes = QPushButton("💾 Сохранить изменения")
         self.btn_cancel_edit = QPushButton("Отмена")
         
         save_layout = QHBoxLayout()
-        save_layout.addWidget(self.btn_save_profile)
         save_layout.addWidget(self.btn_save_changes)
         save_layout.addWidget(self.btn_cancel_edit)
         layout.addLayout(save_layout)
@@ -248,12 +251,15 @@ class BirthInputPanel(QWidget):
         self.chk_zodiac = QCheckBox("Зодиак")
         self.chk_zodiac.setChecked(False)
         label_layout.addWidget(self.chk_zodiac, 0, 1)
+        self.chk_start_dsc = QCheckBox("Начало карты DSC")
+        self.chk_start_dsc.setChecked(False)
+        label_layout.addWidget(self.chk_start_dsc, 0, 2)
         self.lbl_zodiac_periods = QLabel("")
         self.lbl_zodiac_periods.setWordWrap(True)
         self.lbl_zodiac_periods.setVisible(False)
         label_layout.addWidget(self.lbl_zodiac_periods, 1, 0, 1, 2)
         
-        display_layout.addWidget(label_group)
+        display_layout.addWidget(label_group, 1)
         
         dp_btn_layout = QHBoxLayout()
         self.btn_apply_display_profile = QPushButton("📥 Применить")
@@ -262,7 +268,7 @@ class BirthInputPanel(QWidget):
         dp_btn_layout.addWidget(self.btn_save_display_profile)
         display_layout.addLayout(dp_btn_layout)
         
-        layout.addWidget(display_group)
+        layout.addWidget(display_group, 1)
         
         # --- Additional Settings Group ---
         settings_group = QGroupBox("⚙️ Дополнительные настройки")
@@ -293,7 +299,9 @@ class BirthInputPanel(QWidget):
         self.chk_nodes = QCheckBox("Лунные узлы")
         self.chk_nodes.setChecked(False)
         self.chk_fortune = QCheckBox("Фортуна")
+        self.chk_cross = QCheckBox("Крест")
         self.chk_fortune.setChecked(False)
+        self.chk_cross.setChecked(False)
         self.chk_angles = QCheckBox("ASC/MC")
         self.chk_angles.setChecked(True)
         self.chk_dsc = QCheckBox("DSC")
@@ -302,6 +310,7 @@ class BirthInputPanel(QWidget):
         obj_layout.addWidget(self.chk_chiron, 0, 0)
         obj_layout.addWidget(self.chk_nodes, 0, 1)
         obj_layout.addWidget(self.chk_fortune, 0, 2)
+        obj_layout.addWidget(self.chk_cross, 1, 2)
         obj_layout.addWidget(self.chk_angles, 1, 0)
         obj_layout.addWidget(self.chk_dsc, 1, 1)
         settings_layout.addRow("Подписи и линии:", obj_layout)
@@ -310,7 +319,7 @@ class BirthInputPanel(QWidget):
         self.edit_ephe_path = QLineEdit("ephe")
         settings_layout.addRow("Путь к эфемеридам:", self.edit_ephe_path)
         
-        layout.addWidget(settings_group)
+        layout.addWidget(settings_group, 1)
         
         # --- Calculate Button ---
         
@@ -355,7 +364,8 @@ class BirthInputPanel(QWidget):
     def _connect_display_toggles(self):
         """Соединяет экранные тумблеры с сигналом живой перерисовки."""
         for box in (self.chk_show_planet_labels, self.chk_zodiac,
-                    self.chk_chiron, self.chk_nodes, self.chk_fortune,
+                    self.chk_start_dsc,
+                    self.chk_chiron, self.chk_nodes, self.chk_fortune, self.chk_cross,
                     self.chk_angles, self.chk_dsc):
             box.stateChanged.connect(lambda _=0: self.display_toggled.emit())
         self.chk_zodiac.stateChanged.connect(self._on_zodiac_toggled)
