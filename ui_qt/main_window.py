@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtWidgets import QScrollArea
 from PyQt6.QtCore import Qt, pyqtSlot, QSize
 from PyQt6.QtGui import QAction, QIcon, QKeySequence
+from PyQt6.QtCore import QTimer
 from typing import Optional
 
 from astro_core.controllers import (
@@ -131,7 +132,7 @@ class MainWindow(QMainWindow):
         # Profile manager
         self._profile_manager = ProfileManager(self._profile_controller)
         self._profile_manager.setMaximumHeight(112)
-        left_layout.addWidget(self._profile_manager, 0)
+        left_layout.addWidget(self._profile_manager, 1)
         
         # CENTER PANE - Chart View (main focus)
         self._chart_view = ChartView()
@@ -168,6 +169,10 @@ class MainWindow(QMainWindow):
         self._calc_tabs.addTab(self._transits_panel, "🌠 Транзиты дня")
         self._calc_tabs.addTab(self._interpretation_panel, "📖 Анализ")
         self._calc_tabs.addTab(self._directions_panel, "🌀 Дирекции")
+        from ui_qt.widgets.solar_return_panel import SolarReturnPanel
+        self._solar_panel = SolarReturnPanel(
+            lambda: self._current_chart_result, self._city_controller)
+        self._calc_tabs.addTab(self._solar_panel, "☀️ Обращения")
         
         right_layout.addWidget(self._calc_tabs)
         
@@ -276,6 +281,9 @@ class MainWindow(QMainWindow):
         
         # File menu
         file_menu = menubar.addMenu("&Файл")
+        export_portfolio_action = QAction("📤 Экспорт портфеля (HTML)…", self)
+        export_portfolio_action.triggered.connect(self._on_export_portfolio)
+        file_menu.addAction(export_portfolio_action)
         
         new_profile_action = QAction("&Новый профиль", self)
         new_profile_action.setShortcut(QKeySequence.StandardKey.New)
@@ -390,6 +398,16 @@ class MainWindow(QMainWindow):
         kb_gloss = QAction("📖 Глоссарий", self)
         kb_gloss.triggered.connect(lambda _=False: self._open_knowledge("GLOSSARY"))
         kb_menu.addAction(kb_gloss)
+        settings_menu = menubar.addMenu("Настройки")
+        act_ephe = QAction("Путь к эфемеридам…", self)
+        act_ephe.triggered.connect(self._on_settings_ephemeris)
+        settings_menu.addAction(act_ephe)
+        act_profile = QAction("Профиль отображения по умолчанию…", self)
+        act_profile.triggered.connect(self._on_settings_profile)
+        settings_menu.addAction(act_profile)
+        act_city = QAction("Город транзита по умолчанию…", self)
+        act_city.triggered.connect(self._on_settings_city)
+        settings_menu.addAction(act_city)
         help_menu = menubar.addMenu("&Помощь")
         
         about_action = QAction("&О программе", self)
@@ -463,7 +481,7 @@ class MainWindow(QMainWindow):
         
         returns_action = QAction("☀️ Обращения", self)
         returns_action.setToolTip("Солнечные обращения — в разработке")
-        returns_action.triggered.connect(self._on_returns_placeholder)
+        returns_action.triggered.connect(self._on_show_solar_return)
         toolbar.addAction(returns_action)
         
     def _init_status_bar(self):
@@ -504,6 +522,8 @@ class MainWindow(QMainWindow):
         self._progression_panel.calculate_requested.connect(self._handle_calculate_progressions)
         self._synastry_panel.calculate_requested.connect(self._handle_calculate_synastry)
         self._directions_panel.calculate_requested.connect(self._handle_calculate_directions)
+        self._solar_panel.chart_ready.connect(self._show_solar_return)
+        self._solar_panel.help_requested.connect(self._open_knowledge)
         
         # Profile manager signals
         self._profile_manager.profile_selected.connect(self._on_profile_selected)
@@ -512,6 +532,7 @@ class MainWindow(QMainWindow):
         
         # Chart view signals
         self._chart_view.chart_clicked.connect(self._on_chart_clicked)
+        QTimer.singleShot(0, self._apply_user_settings)
         self._chart_view.kb_topic.connect(self._open_knowledge)
         self._directions_panel.help_requested.connect(self._open_knowledge)
         self._transits_panel.help_requested.connect(self._open_knowledge)
@@ -592,11 +613,13 @@ class MainWindow(QMainWindow):
         settings.update({
             "show_planet_labels": p.chk_show_planet_labels.isChecked(),
             "show_sign_names": p.chk_zodiac.isChecked(),
+            "start_dsc": p.chk_start_dsc.isChecked(),
             "show_angle_labels": p.chk_angles.isChecked(),
             "show_dsc": p.chk_dsc.isChecked(),
             "text_chiron": p.chk_chiron.isChecked(),
             "text_nodes": p.chk_nodes.isChecked(),
             "text_fortune": p.chk_fortune.isChecked(),
+            "text_cross": p.chk_cross.isChecked(),
         })
         return settings
             
@@ -926,6 +949,152 @@ class MainWindow(QMainWindow):
                 tabs.setCurrentWidget(panel)
                 return
 
+    def _on_show_solar_return(self):
+        """Открывает вкладку соляра и считает, если есть натал."""
+        self._show_tab(self._solar_panel)
+        if self._current_chart_result:
+            self._solar_panel._on_calculate()
+
+    def _show_solar_return(self, chart, year):
+        """Показывает карту соляра в центре."""
+        self._last_solar_chart = chart
+        self._last_solar_year = year
+        self._chart_mode = "solar"
+        self._chart_view.set_chart_data(chart, self._get_display_settings())
+        self._status_label.setText(f"Соляр {year}: карта построена")
+
+    def _on_export_portfolio(self):
+        """Собирает рассчитанные карты и сводки в один HTML-файл для отправки."""
+        import base64
+
+        from PyQt6.QtCore import QBuffer, QIODevice
+
+        from astro_core import portfolio_export as pex
+
+        if not self._current_chart_result:
+            QMessageBox.warning(
+                self, "Экспорт портфеля",
+                "Сначала рассчитайте натальную карту.")
+            return
+        path, _ = QFileDialog.getSaveFileName(
+            self, "Экспорт портфеля", "astro_portfolio.html",
+            "HTML файлы (*.html)")
+        if not path:
+            return
+        try:
+            image_b64 = None
+            try:
+                pix = self._chart_view.grab()
+                qbuf = QBuffer()
+                if qbuf.open(QIODevice.OpenModeFlag.WriteOnly) and pix.save(qbuf, "PNG"):
+                    image_b64 = base64.b64encode(bytes(qbuf.data())).decode("ascii")
+            except Exception:
+                image_b64 = None
+            birth = self._current_chart_result.get("birth", {})
+            directions = getattr(self, "_current_directions_result", None)
+            directions_date = None
+            last_dir = getattr(self, "_last_directions", None)
+            if isinstance(last_dir, tuple) and len(last_dir) == 2:
+                directions_date = str(last_dir[1])
+            solar_chart = getattr(self, "_last_solar_chart", None)
+            solar_year = getattr(self, "_last_solar_year", None)
+            synastry = None
+            last_syn = getattr(self, "_last_synastry_aspects", None)
+            if last_syn:
+                synastry = {
+                    "aspects": last_syn,
+                    "name_a": birth.get("name", ""),
+                    "name_b": (getattr(self, "_last_synastry_chart_b", None)
+                               or {}).get("birth", {}).get("name", ""),
+                }
+            html = pex.build_portfolio_html(
+                person=birth.get("name", ""),
+                birth_line=f"{birth.get('date', '')} {birth.get('time', '')} · "
+                           f"{birth.get('latitude', '')}, {birth.get('longitude', '')}",
+                image_b64=image_b64,
+                natal_chart=self._current_chart_result,
+                transits_text=getattr(self._transits_panel, "_last_summary", None),
+                directions=directions,
+                directions_date=directions_date,
+                solar_chart=solar_chart,
+                solar_year=solar_year,
+                synastry=synastry,
+                analysis_text=getattr(self._interpretation_panel, "_last_text", None),
+            )
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(html)
+            QMessageBox.information(
+                self, "Экспорт портфеля",
+                f"Портфель сохранён:\n{path}\n"
+                "Файл самодостаточен и готов к отправке по e-mail.")
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Ошибка экспорта",
+                f"Не удалось сохранить портфель:\n{e}")
+
+    def _apply_user_settings(self):
+        """Применяет сохранённые настройки к виджетам при старте."""
+        from astro_core.user_settings import load_user_settings
+        cfg = load_user_settings()
+        ephe = str(cfg.get("ephemeris_path") or "")
+        if ephe:
+            w = getattr(self._birth_input_panel, "edit_ephe_path", None)
+            if w is not None and hasattr(w, "setText"):
+                w.setText(ephe)
+        prof = str(cfg.get("default_display_profile") or "")
+        if prof:
+            w = getattr(self._birth_input_panel, "combo_display_profile", None)
+            if w is not None and hasattr(w, "setCurrentText"):
+                w.setCurrentText(prof)
+        city = str(cfg.get("default_transit_city") or "")
+        if city:
+            w = getattr(self._transits_panel, "combo_transit_city", None)
+            if w is not None and hasattr(w, "setCurrentText"):
+                w.setCurrentText(city)
+
+    def _on_settings_ephemeris(self):
+        from astro_core.user_settings import load_user_settings, save_user_settings
+        cfg = load_user_settings()
+        cur = str(cfg.get("ephemeris_path") or "ephe")
+        text, ok = QInputDialog.getText(
+            self, "Настройки", "Путь к эфемеридам (папка с файлами .se1):", text=cur)
+        if ok:
+            cfg["ephemeris_path"] = text.strip() or "ephe"
+            save_user_settings(cfg)
+            w = getattr(self._birth_input_panel, "edit_ephe_path", None)
+            if w is not None and hasattr(w, "setText"):
+                w.setText(cfg["ephemeris_path"])
+
+    def _on_settings_profile(self):
+        from astro_core.user_settings import load_user_settings, save_user_settings
+        cfg = load_user_settings()
+        w = getattr(self._birth_input_panel, "combo_display_profile", None)
+        items = [w.itemText(i) for i in range(w.count())] if w is not None else []
+        if not items:
+            items = ["full"]
+        cur = str(cfg.get("default_display_profile") or "full")
+        idx = items.index(cur) if cur in items else 0
+        choice, ok = QInputDialog.getItem(
+            self, "Настройки", "Профиль отображения по умолчанию:", items, idx, False)
+        if ok:
+            cfg["default_display_profile"] = choice
+            save_user_settings(cfg)
+
+    def _on_settings_city(self):
+        from astro_core.user_settings import load_user_settings, save_user_settings
+        cfg = load_user_settings()
+        w = getattr(self._transits_panel, "combo_transit_city", None)
+        items = [w.itemText(i) for i in range(w.count())] if w is not None else []
+        cur = str(cfg.get("default_transit_city") or "")
+        idx = items.index(cur) if cur in items else 0
+        choice, ok = QInputDialog.getItem(
+            self, "Настройки", "Город транзита по умолчанию:", items or [""], idx, True)
+        if ok:
+            cfg["default_transit_city"] = choice.strip()
+            save_user_settings(cfg)
+            if w is not None and choice.strip():
+                w.setCurrentText(choice.strip())
+
     def _open_knowledge(self, query=""):
         """Открывает диалог Базы Знаний с запросом."""
         from ui_qt.widgets.knowledge_dialog import KnowledgeDialog
@@ -948,6 +1117,9 @@ class MainWindow(QMainWindow):
             self._chart_view.set_directions_chart_data(
                 self._current_chart_result, result["planets"], result["aspects"],
                 d, self._get_display_settings())
+        elif mode == "solar" and getattr(self, "_last_solar_chart", None) is not None:
+            self._chart_view.set_chart_data(self._last_solar_chart,
+                                            self._get_display_settings())
         else:
             self._update_chart_view()
 

@@ -32,7 +32,7 @@ ALL_PLANETS = [
 ]
 
 # Специальные ключи объектов (не индивидуальные планеты)
-SPECIAL_OBJECTS = ["Chiron", "LunarNodes", "PartOfFortune", "Angles"]
+SPECIAL_OBJECTS = ["Chiron", "LunarNodes", "PartOfFortune", "CrossOfFate", "Angles"]
 
 # Все ключи объектов, доступные в профиле
 ALL_OBJECT_KEYS = ALL_PLANETS + SPECIAL_OBJECTS
@@ -314,6 +314,13 @@ def apply_profile_to_settings(profile, base_settings=None):
     settings["include_chiron"] = bool(objects.get("Chiron", True))
     settings["include_nodes"] = bool(objects.get("LunarNodes", True))
     settings["include_part_of_fortune"] = bool(objects.get("PartOfFortune", True))
+    settings["include_cross_of_fate"] = bool(objects.get("CrossOfFate", True))
+
+    # Итерация 35: classic и minimal — без Фортуны и Креста (перезапись после objects)
+    pname = profile if isinstance(profile, str) else (profile.get("name", "") if isinstance(profile, dict) else "")
+    if pname in ("classic", "minimal"):
+        settings["include_part_of_fortune"] = False
+        settings["include_cross_of_fate"] = False
     settings["include_angles"] = bool(objects.get("Angles", True))
     settings["include_dsc"] = bool(objects.get("Angles", True))
     settings["enabled_planets"] = [p for p in ALL_PLANETS if objects.get(p, True)]

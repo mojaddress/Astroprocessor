@@ -55,7 +55,18 @@ class KnowledgeDialog(QDialog):
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
         self.list_cats.addItems(["Все"] + categories())
-        if initial_query == "GLOSSARY":
+        if initial_query and initial_query.startswith("id:"):
+            article_id = initial_query[3:]
+            for i, art in enumerate(KB_ARTICLES):
+                if art["id"] == article_id:
+                    cat = art["category"]
+                    cats = categories()
+                    if cat in cats:
+                        self.list_cats.setCurrentRow(1 + cats.index(cat))
+                    self.list_articles.setCurrentRow(i)
+                    self._show_article()
+                    return
+        elif initial_query == "GLOSSARY":
             cats = categories()
             if "Глоссарий" in cats:
                 self.list_cats.setCurrentRow(1 + cats.index("Глоссарий"))
@@ -65,7 +76,8 @@ class KnowledgeDialog(QDialog):
 
     def _filtered(self):
         q = self.edit_search.text().strip()
-        cat = self.list_cats.currentText()
+        cat_item = self.list_cats.currentItem()
+        cat = cat_item.text() if cat_item is not None else ""
         arts = search_articles(q) if q else list(KB_ARTICLES)
         if cat and cat != "Все":
             arts = [a for a in arts if a["category"] == cat]

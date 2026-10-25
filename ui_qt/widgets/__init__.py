@@ -14,6 +14,7 @@ from .transits_panel import TransitsPanel
 from .interpretation_panel import InterpretationPanel
 from .directions_panel import DirectionsPanel
 from .knowledge_dialog import KnowledgeDialog
+from .solar_return_panel import SolarReturnPanel
 
 __all__ = [
     "ChartView",

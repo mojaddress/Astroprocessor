@@ -83,10 +83,11 @@ class ChartView(QGraphicsView):
         self._directions_date = None
         self._svg_content = ""
         self._settings = {
-            "show_planet_labels": False, "show_sign_names": False,
+            "show_planet_labels": False, "show_sign_names": False, "start_dsc": False,
             "show_houses": True, "show_aspects": True, "show_legend": True,
             "show_angle_labels": True, "show_dsc": True,
             "text_chiron": False, "text_nodes": False, "text_fortune": False,
+            "text_cross": False,
             "label_mode": "symbols",
             "planet_colors": {}, "aspect_colors": {}, "planet_dot_size": 6,
         }
@@ -97,6 +98,7 @@ class ChartView(QGraphicsView):
         self.setResizeAnchor(QGraphicsView.ViewportAnchor.AnchorUnderMouse)
         self._zoom_factor = 1.0
         self._min_zoom, self._max_zoom = 0.1, 20.0
+        self._rot = 0.0
 
     def set_chart_data(self, chart_data, display_settings=None):
         self._chart_data = chart_data
@@ -168,6 +170,12 @@ class ChartView(QGraphicsView):
     def _rebuild(self):
         if not self._chart_data:
             return
+        self._rot = 0.0
+        if self._settings.get("start_dsc", False):
+            for pt in (self._chart_data or {}).get("additional_points", []):
+                if pt.get("name") == "DSC" and pt.get("longitude") is not None:
+                    self._rot = pt["longitude"]
+                    break
         self._scene = QGraphicsScene(0, 0, SCENE_SIZE, SCENE_SIZE, self)
         self.setScene(self._scene)
         self._scene.addRect(0, 0, SCENE_SIZE, SCENE_SIZE,
@@ -180,6 +188,16 @@ class ChartView(QGraphicsView):
             self._build_natal()
         self.fitInView(self._scene.sceneRect(), Qt.AspectRatioMode.KeepAspectRatio)
         self._zoom_factor = 1.0
+
+    def _lp(self, lon, radius, c):
+        """Точка с учётом поворота колеса (старт с DSC)."""
+        return lon_to_point((lon - self._rot) % 360.0, radius, c)
+
+    @staticmethod
+    def _roman(n):
+        rom = {1: "I", 2: "II", 3: "III", 4: "IV", 5: "V", 6: "VI",
+               7: "VII", 8: "VIII", 9: "IX", 10: "X", 11: "XI", 12: "XII"}
+        return rom.get(int(n), str(n))
 
     def _pen(self, color, width, dash=False):
         pen = QPen(QColor(color), width)
@@ -266,7 +284,8 @@ class ChartView(QGraphicsView):
             lines.append(f"Скорость: {pl['speed_longitude']:+.2f}°/день")
         return "\n".join(lines)
 
-    def _place_planets(self, planets, radius, dot_r, glyph_box, label_offset):
+    def _place_planets(self, planets, radius, dot_r, glyph_box, label_offset,
+                       inside=False):
         c = SCENE_SIZE / 2
         positions = {}
         used_dots = []
@@ -285,7 +304,7 @@ class ChartView(QGraphicsView):
                     if cand >= SCENE_SIZE * 0.25:
                         r, shifts = cand, shifts + 1
             used_dots.append((lon, r))
-            positions[name] = (lon_to_point(lon, r, c), pl, r)
+            positions[name] = (self._lp(lon, r, c), pl, r)
 
         used_labels = []
         for name, (pos, pl, dot_radius) in positions.items():
@@ -298,18 +317,22 @@ class ChartView(QGraphicsView):
             dot.setZValue(4)
             dot.setToolTip(tip)
             dot.setData(0, f"planet-{name.lower()}")
+            ddeg = int(round(lon % 30)) % 30
             dot.setAcceptHoverEvents(True)
-            label_radius = dot_radius + label_offset
+            label_radius = dot_radius + (-label_offset if inside else label_offset)
             for attempt in range(5):
-                tp = lon_to_point(lon, label_radius + attempt * glyph_box * 0.4, c)
+                step = -attempt * glyph_box * 0.4 if inside else attempt * glyph_box * 0.4
+                tp = self._lp(lon, label_radius + step, c)
                 if all(math.hypot(tp.x() - up.x(), tp.y() - up.y()) >= glyph_box * 1.2
                        for _ul, up in used_labels):
                     used_labels.append((lon, tp))
                     mode = self._settings["label_mode"]
                     if mode != "words":
                         self._glyph(name, tp.x(), tp.y(), glyph_box, color.name(), tooltip=tip)
+                    self._text(tp.x() + glyph_box * 0.45, tp.y() - glyph_box * 0.45,
+                               str(ddeg), 9, "#666666")
                     if pl.get("retrograde"):
-                        self._text(tp.x() + glyph_box * 0.45, tp.y() - glyph_box * 0.45,
+                        self._text(tp.x() + glyph_box * 0.45, tp.y() + glyph_box * 0.55,
                                    "R", 9, "#D62828")
                     if mode != "symbols" or self._text_label(name):
                         self._text(tp.x(), tp.y() + glyph_box,
@@ -356,21 +379,21 @@ class ChartView(QGraphicsView):
         periods = self._sign_periods_by_sign(year)
         for i, sign in enumerate(SIGNS):
             b = i * 30.0
-            p1, p2 = lon_to_point(b, r_in, c), lon_to_point(b, r_out, c)
+            p1, p2 = self._lp(b, r_in, c), self._lp(b, r_out, c)
             self._scene.addLine(p1.x(), p1.y(), p2.x(), p2.y(), self._pen("#3a3a3a", 1.0))
             mid_r = (r_in + r_out) / 2
             tip = self._sign_tooltip(sign, year, periods)
             if self._settings.get("show_sign_names", False):
-                sp = lon_to_point(b + 15.0, mid_r + 9, c)
+                sp = self._lp(b + 15.0, mid_r + 9, c)
                 t1 = self._text(sp.x(), sp.y(), SIGN_SYMBOLS[sign], font_size - 2,
                                 "#1a1a1a", symbol=True)
-                np_ = lon_to_point(b + 15.0, mid_r - 9, c)
+                np_ = self._lp(b + 15.0, mid_r - 9, c)
                 t2 = self._text(np_.x(), np_.y(), SIGN_NAMES_RU[sign], 8, "#444444")
                 t1.setToolTip(tip)
                 t1.setData(0, f"sign-{sign.lower()}")
                 t2.setToolTip(tip)
             else:
-                mp = lon_to_point(b + 15.0, mid_r, c)
+                mp = self._lp(b + 15.0, mid_r, c)
                 t1 = self._text(mp.x(), mp.y(), SIGN_SYMBOLS[sign], font_size,
                                 "#1a1a1a", symbol=True)
                 t1.setToolTip(tip)
@@ -392,19 +415,27 @@ class ChartView(QGraphicsView):
     def _draw_houses(self, houses, r_in, r_out):
         if not houses or not self._settings["show_houses"]:
             return
+        r_out = r_in + (r_out - r_in) * 0.7
         c = SCENE_SIZE / 2
         for h in houses:
             lon = h.get("longitude")
             if lon is None:
                 continue
             n = h.get("house", 0)
-            p1, p2 = lon_to_point(lon, r_in, c), lon_to_point(lon, r_out, c)
             w = 1.8 if n == 1 else 1.0
-            self._scene.addLine(p1.x(), p1.y(), p2.x(), p2.y(), self._pen("#2a2a2a", w))
+            pen = self._pen("#2a2a2a", w)
+            p1, p2 = self._lp(lon, r_in, c), self._lp(lon, r_out, c)
+            self._scene.addLine(p1.x(), p1.y(), p2.x(), p2.y(), pen)
+            t1, t2 = self._lp(lon, SCENE_SIZE * R_OUTER, c), self._lp(
+                lon, SCENE_SIZE * R_OUTER + SCENE_SIZE * 0.018, c)
+            self._scene.addLine(t1.x(), t1.y(), t2.x(), t2.y(), pen)
             nxt = houses[n % len(houses)].get("longitude", lon)
             mid = (lon + ((nxt - lon) % 360) / 2) % 360
-            mp = lon_to_point(mid, (r_in + r_out) / 2, c)
-            self._text(mp.x(), mp.y(), str(n), 11, "#4a4a4a")
+            mp = self._lp(mid, (r_in + r_out) / 2, c)
+            self._text(mp.x(), mp.y(), self._roman(n), 11, "#4a4a4a")
+            cdeg = int(round(lon % 30)) % 30
+            cpos = self._lp(lon, r_in - 10, c)
+            self._text(cpos.x(), cpos.y(), str(cdeg), 7, "#888888")
 
     def _draw_angles(self, points, r_from, r_to):
         if not self._settings["show_angle_labels"]:
@@ -418,9 +449,9 @@ class ChartView(QGraphicsView):
                 continue
             color = {"ASC": "#E74C3C", "MC": "#3498DB",
                      "DSC": "#16A085"}.get(name, "#888888")
-            p1, p2 = lon_to_point(lon, r_from, c), lon_to_point(lon, r_to, c)
+            p1, p2 = self._lp(lon, r_from, c), self._lp(lon, r_to, c)
             self._scene.addLine(p1.x(), p1.y(), p2.x(), p2.y(), self._pen(color, 2.5))
-            tp = lon_to_point(lon, r_to + SCENE_SIZE * 0.04, c)
+            tp = self._lp(lon, r_to + SCENE_SIZE * 0.04, c)
             titem = self._text(tp.x(), tp.y(), name, 16, color)
             titem.setData(0, "angles")
 
@@ -455,28 +486,49 @@ class ChartView(QGraphicsView):
                                       aspect_tooltip(a.get("aspect", ""), pa, pb))
 
     def _draw_point_of_fortune(self, additional, radius, dot_r, glyph_box):
+        """Точки Фортуна и Крест судьбы: точка, глиф, градус, подпись."""
         c = SCENE_SIZE / 2
+        result = None
         for pt in additional:
-            if pt.get("name") != "PartOfFortune":
+            name = pt.get("name")
+            if name not in ("PartOfFortune", "CrossOfFate"):
                 continue
             lon = pt.get("longitude")
             if lon is None:
                 continue
-            pos = lon_to_point(lon, radius, c)
-            color = QColor("#B8860B")
+            pos = self._lp(lon, radius, c)
+            color = QColor("#B8860B" if name == "PartOfFortune" else "#8E44AD")
             tip = self._format_tooltip(pt)
             dot = self._scene.addEllipse(QRectF(pos.x() - dot_r, pos.y() - dot_r,
                                                 2 * dot_r, 2 * dot_r),
                                          self._pen("#FFFFFF", 1.0), QBrush(color))
             dot.setZValue(4)
             dot.setToolTip(tip)
+            dot.setData(0, f"planet-{name.lower()}")
             dot.setAcceptHoverEvents(True)
-            lp = lon_to_point(lon, radius + glyph_box * 0.8, c)
-            self._glyph("PartOfFortune", lp.x(), lp.y(), glyph_box, color.name(), tooltip=tip)
-            if self._text_label("PartOfFortune"):
-                self._text(lp.x(), lp.y() + glyph_box, "Фортуна", 10, color.name())
-            return pos
-        return None
+            ddeg = int(round(lon % 30)) % 30
+            lp = self._lp(lon, radius - glyph_box * 0.8, c)
+            if name == "PartOfFortune":
+                self._glyph("PartOfFortune", lp.x(), lp.y(), glyph_box * 1.15,
+                            color.name(), tooltip=tip)
+            else:
+                arm = glyph_box * 0.35
+                pen = self._pen(color.name(), max(0.8, GLYPH_STROKE * 0.7))
+                self._scene.addLine(lp.x() - arm, lp.y(), lp.x() + arm, lp.y(), pen)
+                self._scene.addLine(lp.x(), lp.y() - arm, lp.x(), lp.y() + arm, pen)
+            self._text(lp.x() + glyph_box * 0.45, lp.y() - glyph_box * 0.45,
+                       str(ddeg), 9, "#666666")
+            if name == "PartOfFortune":
+                label_on = self._text_label("PartOfFortune")
+                label = "Фортуна"
+            else:
+                label_on = self._settings.get("text_cross", False)
+                label = "Крест"
+            if label_on:
+                self._text(lp.x(), lp.y() + glyph_box, label, 10, color.name())
+            if result is None:
+                result = pos
+        return result
 
     def _draw_legend(self):
         if not self._settings.get("show_legend", True):
@@ -504,12 +556,12 @@ class ChartView(QGraphicsView):
         self._draw_zodiac(s * R_ZODIAC, s * R_OUTER, 17)
         self._draw_houses(self._chart_data.get("houses", []), s * R_ASPECTS, s * R_HOUSES)
         positions = self._place_planets(self._chart_data.get("planets", []),
-                                        s * R_PLANETS, self._settings["planet_dot_size"],
-                                        30, s * 0.028)
+                                        s * R_ASPECTS, self._settings["planet_dot_size"],
+                                        30, s * 0.028, inside=True)
         self._draw_angles(self._chart_data.get("additional_points", []),
                           s * R_HOUSES, s * R_OUTER)
         pof = self._draw_point_of_fortune(self._chart_data.get("additional_points", []),
-                                          s * R_PLANETS, self._settings["planet_dot_size"], 26)
+                                          s * R_ASPECTS, self._settings["planet_dot_size"], 26)
         if pof is not None:
             positions["PartOfFortune"] = pof
         self._draw_aspects(self._chart_data.get("aspects", []), positions)
@@ -532,9 +584,10 @@ class ChartView(QGraphicsView):
             self._scene.addEllipse(QRectF(c - r, c - r, 2 * r, 2 * r), self._pen(col, w, dash))
         self._draw_zodiac(s * R_ZODIAC, s * R_OUTER, 15)
         self._draw_houses(self._chart_data.get("houses", []), r_asp, r_nat)
-        nat_pos = self._place_planets(self._chart_data.get("planets", []), r_nat, 5, 24, s * 0.02)
+        nat_pos = self._place_planets(self._chart_data.get("planets", []), r_asp, 5, 24,
+                                      s * 0.02, inside=True)
         tr_pos = self._place_planets(self._transit_planets, r_tr, 5, 24, s * 0.02)
-        pof = self._draw_point_of_fortune(self._chart_data.get("additional_points", []), r_nat, 5, 22)
+        pof = self._draw_point_of_fortune(self._chart_data.get("additional_points", []), r_asp, 5, 22)
         if pof is not None:
             nat_pos["PartOfFortune"] = pof
         for a in self._transit_aspects:
@@ -550,6 +603,7 @@ class ChartView(QGraphicsView):
     def _build_synastry(self):
         c = SCENE_SIZE / 2
         s = SCENE_SIZE
+        r_asp = s * R_ASPECTS
         r_tr, r_nat = s * 0.360, s * 0.280
         na = self._chart_data.get("birth", {}).get("name", "A")
         nb = (self._chart_b or {}).get("birth", {}).get("name", "B")
@@ -561,7 +615,8 @@ class ChartView(QGraphicsView):
                                 (s * R_ASPECTS, "#888888", 0.6, True)):
             self._scene.addEllipse(QRectF(c - r, c - r, 2 * r, 2 * r), self._pen(col, w, dash))
         self._draw_zodiac(s * R_ZODIAC, s * R_OUTER, 15)
-        pa = self._place_planets(self._chart_data.get("planets", []), r_nat, 5, 24, s * 0.02)
+        pa = self._place_planets(self._chart_data.get("planets", []), r_asp, 5, 24,
+                                s * 0.02, inside=True)
         pb = self._place_planets((self._chart_b or {}).get("planets", []), r_tr, 5, 24, s * 0.02)
         for a in self._synastry_aspects:
             p1n, p2n = a.get("point_a"), a.get("point_b")

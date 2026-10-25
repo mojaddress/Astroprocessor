@@ -158,7 +158,7 @@ def test_aspects_only_between_enabled_objects():
         "include_nodes": False,
     }
     result = build_natal_chart(DEMO_BIRTH, settings)
-    allowed = {"Sun", "Moon", "ASC", "MC", "DSC", "PartOfFortune"}
+    allowed = {"Sun", "Moon", "ASC", "MC", "DSC", "PartOfFortune", "CrossOfFate"}
     for aspect in result["aspects"]:
         assert aspect["point_a"] in allowed, f"Лишняя точка в аспекте: {aspect['point_a']}"
         assert aspect["point_b"] in allowed, f"Лишняя точка в аспекте: {aspect['point_b']}"
