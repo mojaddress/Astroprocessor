@@ -124,7 +124,7 @@ class MainWindow(QMainWindow):
         birth_scroll.setWidgetResizable(True)
         birth_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
         birth_scroll.setWidget(self._birth_input_panel)
-        left_layout.addWidget(birth_scroll, 3)
+        left_layout.addWidget(birth_scroll, 5)
         
         # Load display profiles into birth input panel
         self._birth_input_panel._load_display_profiles()
@@ -132,7 +132,7 @@ class MainWindow(QMainWindow):
         # Profile manager
         self._profile_manager = ProfileManager(self._profile_controller)
         self._profile_manager.setMaximumHeight(112)
-        left_layout.addWidget(self._profile_manager, 1)
+        left_layout.addWidget(self._profile_manager, 0)
         
         # CENTER PANE - Chart View (main focus)
         self._chart_view = ChartView()
@@ -620,6 +620,9 @@ class MainWindow(QMainWindow):
             "text_nodes": p.chk_nodes.isChecked(),
             "text_fortune": p.chk_fortune.isChecked(),
             "text_cross": p.chk_cross.isChecked(),
+            "text_blackmoon": p.chk_blackmoon.isChecked(),
+            "text_selena": p.chk_selena.isChecked(),
+            "text_proserpina": p.chk_proserpina.isChecked(),
         })
         return settings
             
@@ -1095,6 +1098,56 @@ class MainWindow(QMainWindow):
             if w is not None and choice.strip():
                 w.setCurrentText(choice.strip())
 
+    def showEvent(self, event):
+        """База свободного места левой колонки фиксируется после первого показа (37e)."""
+        super().showEvent(event)
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(0, self._capture_pm_baseline)
+
+    def _capture_pm_baseline(self):
+        """37j: settle-проход = один вызов единого центра."""
+        self._apply_left_layout()
+    def _recapture_after_settle(self):
+        """37j: более не используется."""
+        return
+    def _apply_left_layout(self):
+        """37j: единый центр расчёта высот левой колонки (6 блоков)."""
+        pm = getattr(self, "_profile_manager", None)
+        bip = getattr(self, "_birth_input_panel", None)
+        if pm is None or bip is None:
+            return
+        groups = getattr(bip, "_eq_groups", None)
+        if not groups:
+            return
+        container = pm.parentWidget()
+        lay = container.layout() if container is not None else None
+        if lay is None:
+            return
+        MAXH = 16777215
+        for g in groups:
+            g.setMinimumHeight(0)
+            g.setMaximumHeight(MAXH)
+        pm.setMinimumHeight(0)
+        pm.setMaximumHeight(MAXH)
+        nat_g = [g.sizeHint().height() for g in groups]
+        bip_total = bip.layout().totalSizeHint().height()
+        nat_pm = (pm.compact_height() if hasattr(pm, "compact_height")
+                  else pm.sizeHint().height())
+        natural_total = bip_total + 6 + nat_pm + lay.spacing()
+        raw = container.height() - natural_total
+        base = getattr(self, "_pm_initial_extra", None)
+        if base is None:
+            base = self._pm_initial_extra = max(0, raw)
+        delta = max(0, raw - base)
+        share = delta // 6
+        for g, h in zip(groups, nat_g):
+            g.setFixedHeight(h + share)
+        pm.setFixedHeight(nat_pm + share)
+
+    def resizeEvent(self, event):
+        """Только делегирование единому центру расчёта (37j)."""
+        super().resizeEvent(event)
+        self._apply_left_layout()
     def _open_knowledge(self, query=""):
         """Открывает диалог Базы Знаний с запросом."""
         from ui_qt.widgets.knowledge_dialog import KnowledgeDialog
@@ -1149,6 +1202,9 @@ class MainWindow(QMainWindow):
             profile_b = self._profile_controller.load_profile(person_b_name)
             birth_b = self._profile_controller.profile_to_birth_data(profile_b)
             settings = self._birth_input_panel.get_settings()
+            from astro_core.display_profiles import apply_profile_to_settings
+            settings = apply_profile_to_settings(
+                self._birth_input_panel.get_current_display_profile(), settings)
             chart_b = self._chart_controller.calculate_chart(
                 birth_b, settings, self._current_display_profile_name,
                 include_svg=False)

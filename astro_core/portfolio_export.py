@@ -2,6 +2,7 @@
 Экспорт портфеля карт в один самодостаточный HTML-файл (итерация 31).
 Без внешних зависимостей: изображение встраивается base64, стили — inline CSS.
 """
+import math
 from datetime import datetime
 from html import escape
 from typing import Dict, Optional
@@ -42,7 +43,7 @@ def _planet_rows(chart: Dict):
             deg = lon % 30.0
         rows.append([
             get_planet_name_ru(p.get("name", "")),
-            f"{int(round(deg)) % 30}°",
+            f"{int(min(math.ceil(deg - 1e-9), 30))}°",
             f"{lon:.2f}",
             get_sign_name_ru(p.get("sign", "")),
             str(p.get("house") or "—"),
@@ -111,7 +112,7 @@ def build_portfolio_html(*, person: str, birth_line: str,
                             [[get_planet_name_ru(p.get("name", "")),
                               f"{p.get('longitude', 0.0):.2f}",
                               get_sign_name_ru(p.get("sign", "")),
-                              f"{int(round(p.get('degree_in_sign') or 0.0)) % 30}°"]
+                              f"{int(min(math.ceil((p.get('degree_in_sign') or 0.0) - 1e-9), 30))}°"]
                              for p in directions.get("planets", [])]))
         parts.append(_table(["Дир. планета", "Натальная точка", "Аспект", "Орб", "Баллы"],
                             [[get_planet_name_ru(a.get("dir_planet", "")),

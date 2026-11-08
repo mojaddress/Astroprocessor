@@ -307,6 +307,24 @@ def build_natal_chart(birth, settings=None):
                     all_objects.append(cross_object)
                     additional_points.append(cross_object)
 
+            from .ephemeris import calculate_hypothetical_point
+            for _pn, _ik in (("BlackMoon", "include_black_moon"),
+                             ("Selena", "include_selena"),
+                             ("Proserpina", "include_proserpina")):
+                if not settings.get(_ik, True):
+                    continue
+                try:
+                    _hp = calculate_hypothetical_point(julian_day, _pn, settings)
+                except Exception as e:
+                    warnings.append(f"Не удалось рассчитать {_pn}: {e}")
+                    continue
+                if _hp is None:
+                    warnings.append(f"{_pn}: нужен файл эфемерид seorbel.elc в папке ephe")
+                    continue
+                _hp["house"] = house_for_longitude(cusp_longitudes, _hp["longitude"])
+                all_objects.append(_hp)
+                additional_points.append(_hp)
+
 
     aspects = []
 

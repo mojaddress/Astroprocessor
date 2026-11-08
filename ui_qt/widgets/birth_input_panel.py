@@ -16,6 +16,7 @@ from astro_core.controllers.city_controller import City
 
 
 from PyQt6.QtWidgets import QGridLayout
+from PyQt6.QtWidgets import QSizePolicy
 
 
 class CityCompleter(QCompleter):
@@ -300,8 +301,14 @@ class BirthInputPanel(QWidget):
         self.chk_nodes.setChecked(False)
         self.chk_fortune = QCheckBox("Фортуна")
         self.chk_cross = QCheckBox("Крест")
+        self.chk_blackmoon = QCheckBox("Лилит")
+        self.chk_selena = QCheckBox("Селена")
+        self.chk_proserpina = QCheckBox("Прозерпина")
         self.chk_fortune.setChecked(False)
         self.chk_cross.setChecked(False)
+        self.chk_blackmoon.setChecked(False)
+        self.chk_selena.setChecked(False)
+        self.chk_proserpina.setChecked(False)
         self.chk_angles = QCheckBox("ASC/MC")
         self.chk_angles.setChecked(True)
         self.chk_dsc = QCheckBox("DSC")
@@ -311,6 +318,9 @@ class BirthInputPanel(QWidget):
         obj_layout.addWidget(self.chk_nodes, 0, 1)
         obj_layout.addWidget(self.chk_fortune, 0, 2)
         obj_layout.addWidget(self.chk_cross, 1, 2)
+        obj_layout.addWidget(self.chk_blackmoon, 2, 0)
+        obj_layout.addWidget(self.chk_selena, 2, 1)
+        obj_layout.addWidget(self.chk_proserpina, 2, 2)
         obj_layout.addWidget(self.chk_angles, 1, 0)
         obj_layout.addWidget(self.chk_dsc, 1, 1)
         settings_layout.addRow("Подписи и линии:", obj_layout)
@@ -320,6 +330,15 @@ class BirthInputPanel(QWidget):
         settings_layout.addRow("Путь к эфемеридам:", self.edit_ephe_path)
         
         layout.addWidget(settings_group, 1)
+        for _g in (profiles_group, birth_group, city_group,
+                   display_group, settings_group):
+            _g.setSizePolicy(QSizePolicy.Policy.Preferred,
+                             QSizePolicy.Policy.Preferred)
+        self._eq_groups = [profiles_group, birth_group, city_group,
+                           display_group, settings_group]
+        self._eq_initial_extra = None
+        self.chk_zodiac.toggled.connect(
+            lambda _=False: self._request_left_layout_apply())
         
         # --- Calculate Button ---
         
@@ -366,6 +385,7 @@ class BirthInputPanel(QWidget):
         for box in (self.chk_show_planet_labels, self.chk_zodiac,
                     self.chk_start_dsc,
                     self.chk_chiron, self.chk_nodes, self.chk_fortune, self.chk_cross,
+                    self.chk_blackmoon, self.chk_selena, self.chk_proserpina,
                     self.chk_angles, self.chk_dsc):
             box.stateChanged.connect(lambda _=0: self.display_toggled.emit())
         self.chk_zodiac.stateChanged.connect(self._on_zodiac_toggled)
@@ -378,10 +398,10 @@ class BirthInputPanel(QWidget):
         try:
             from astro_core.zodiac_calendar import format_sign_periods, sign_periods
             year = self.edit_birth_date.date().year()
-            self.lbl_zodiac_periods.setText(
+            self._set_periods_text(
                 f"Периоды знаков, {year}:\n" + format_sign_periods(sign_periods(year)))
         except Exception as e:
-            self.lbl_zodiac_periods.setText(f"Периоды знаков недоступны: {e}")
+            self._set_periods_text(f"Периоды знаков недоступны: {e}")
         self.lbl_zodiac_periods.setVisible(True)
     def _on_city_query_changed(self, text: str):
         """Город — один комбо: обновляем только модель подсказок."""
@@ -444,6 +464,10 @@ class BirthInputPanel(QWidget):
             self.chk_nodes.setChecked(bool(objects["LunarNodes"]))
         if "PartOfFortune" in objects:
             self.chk_fortune.setChecked(bool(objects["PartOfFortune"]))
+            self.chk_cross.setChecked(bool(objects.get("CrossOfFate", True)))
+            self.chk_blackmoon.setChecked(bool(objects.get("BlackMoon", True)))
+            self.chk_selena.setChecked(bool(objects.get("Selena", True)))
+            self.chk_proserpina.setChecked(bool(objects.get("Proserpina", True)))
         if "Angles" in objects:
             self.chk_angles.setChecked(bool(objects["Angles"]))
             self.chk_dsc.setChecked(bool(objects["Angles"]))
@@ -470,6 +494,89 @@ class BirthInputPanel(QWidget):
         """Скрывает пустую строку информации о городе (убирает пустой зазор)."""
         self.lbl_city_info.setVisible(bool(self.lbl_city_info.text().strip()))
 
+    def _set_periods_text(self, text):
+        """Список периодов знаков — в две колонки (итерация 37)."""
+        from html import escape as _esc
+        lines_ = [l for l in str(text).split("\n") if l.strip()]
+        half = (len(lines_) + 1) // 2
+        left, right = lines_[:half], lines_[half:]
+        rows = max(len(left), len(right), 1)
+        html = "<table cellspacing='0' cellpadding='0'>"
+        for i in range(rows):
+            a = _esc(left[i]) if i < len(left) else ""
+            b = _esc(right[i]) if i < len(right) else ""
+            html += (f"<tr><td style='padding-right:14px;white-space:pre'>{a}</td>"
+                     f"<td style='white-space:pre'>{b}</td></tr>")
+        html += "</table>"
+        self.lbl_zodiac_periods.setTextFormat(Qt.TextFormat.RichText)
+        self.lbl_zodiac_periods.setText(html)
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(0, self._request_left_layout_apply)
+
+    def showEvent(self, event):
+        """База свободного места фиксируется после первого показа (37e)."""
+        super().showEvent(event)
+        from PyQt6.QtCore import QTimer
+        QTimer.singleShot(0, self._capture_eq_baseline)
+
+    def _eq_naturals(self):
+        """Естественные высоты секций, измеренные БЕЗ ограничений (37g)."""
+        groups = getattr(self, "_eq_groups", None) or []
+        for g in groups:
+            g.setMinimumHeight(0)
+            g.setMaximumHeight(16777215)
+        nat = [g.sizeHint().height() for g in groups]
+        total = self.layout().totalSizeHint().height()
+        return nat, total
+
+    def _apply_eq_heights(self):
+        """Фикс-высоты: естественная + прирост/5; база и натуралы без обратной связи (37g)."""
+        groups = getattr(self, "_eq_groups", None)
+        if not groups:
+            return
+        nat, total = self._eq_naturals()
+        self._eq_natural_total = total
+        base = getattr(self, "_eq_initial_extra", None)
+        if base is None:
+            base = self._eq_initial_extra = max(0, self.height() - total)
+        delta = (self.height() - total) - base
+        if delta > 0:
+            share = delta // len(groups)
+            for g, h in zip(groups, nat):
+                g.setFixedHeight(h + share)
+        else:
+            for g, h in zip(groups, nat):
+                g.setFixedHeight(h)
+
+    def _capture_eq_baseline(self):
+        self._apply_eq_heights()
+    def _apply_eq_heights(self):
+        """Точные высоты секций: естественная + прирост/5 (итерация 37f)."""
+        groups = getattr(self, "_eq_groups", None)
+        base = getattr(self, "_eq_initial_extra", None)
+        if not groups or base is None:
+            return
+        for g in groups:
+            g.setMinimumHeight(0)
+            g.setMaximumHeight(16777215)
+        total = self.layout().totalSizeHint().height()
+        delta = (self.height() - total) - base
+        if delta > 0:
+            share = delta // len(groups)
+            for g in groups:
+                g.setFixedHeight(g.sizeHint().height() + share)
+        else:
+            for g in groups:
+                g.setFixedHeight(g.sizeHint().height())
+
+    def _request_left_layout_apply(self):
+        w = self.window()
+        if hasattr(w, "_apply_left_layout"):
+            w._apply_left_layout()
+
+    def resizeEvent(self, event):
+        """37j: панель не управляет геометрией — только единый центр в MainWindow."""
+        super().resizeEvent(event)
     def _on_manual_coords_toggled(self, checked: bool):
         """Toggle manual coordinates visibility."""
         self.manual_widget.setVisible(checked)
@@ -550,6 +657,33 @@ class BirthInputPanel(QWidget):
             "city_timezone": self.lbl_city_info.text().replace("Часовой пояс: ", "") if "Часовой пояс:" in self.lbl_city_info.text() else "",
         }
         
+    def get_current_display_profile(self):
+        """Текущий профиль отображения: встроенный или пользовательский (38f)."""
+        profile_name = self.combo_display_profile.currentText()
+        from astro_core import display_profiles as dp
+        builtins = getattr(dp, "BUILTIN_PROFILE_NAMES",
+                           ("classic", "vedic", "minimal", "full"))
+        if profile_name in builtins:
+            return dp.get_builtin_profile(profile_name)
+        for fn_name in ("load_display_profile", "get_display_profile",
+                        "get_user_profile", "get_profile"):
+            fn = getattr(dp, fn_name, None)
+            if fn is not None:
+                try:
+                    return fn(profile_name)
+                except Exception:
+                    continue
+        ctrl = (getattr(self, "_display_controller", None)
+                or getattr(self, "display_profile_controller", None))
+        if ctrl is not None:
+            for meth in ("get_profile", "profile_by_name", "load_profile"):
+                fn = getattr(ctrl, meth, None)
+                if fn is not None:
+                    try:
+                        return fn(profile_name)
+                    except Exception:
+                        continue
+        return dp.get_builtin_profile("full")
     def get_settings(self) -> dict:
         """Get calculation settings from form."""
         zodiac = "sidereal" if self.radio_sidereal.isChecked() else "tropical"
@@ -564,6 +698,10 @@ class BirthInputPanel(QWidget):
             "include_chiron": self.chk_chiron.isChecked(),
             "include_nodes": self.chk_nodes.isChecked(),
             "include_part_of_fortune": self.chk_fortune.isChecked(),
+            "include_cross_of_fate": self.chk_cross.isChecked(),
+            "include_black_moon": self.chk_blackmoon.isChecked(),
+            "include_selena": self.chk_selena.isChecked(),
+            "include_proserpina": self.chk_proserpina.isChecked(),
             "include_angles": self.chk_angles.isChecked(),
             "include_dsc": self.chk_dsc.isChecked(),
             "show_planet_labels": self.chk_show_planet_labels.isChecked(),
