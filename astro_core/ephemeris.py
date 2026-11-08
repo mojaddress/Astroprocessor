@@ -416,3 +416,36 @@ def get_planet_position(julian_day, planet_name, settings=None):
     speed_longitude = float(coords[3]) if len(coords) > 3 else 0.0
 
     return longitude, speed_longitude
+
+
+def calculate_hypothetical_point(julian_day, name, settings=None):
+    """Точки русской школы: Лилит (средний апогей), Селена, Прозерпина.
+
+    Селена и Прозерпина требуют файл seorbel.elc в папке эфемерид;
+    при его отсутствии возвращается None (итерация 39, D-82).
+    """
+    ids = {"BlackMoon": ("MEAN_APOGEE", 12),
+           "Selena": ("WHITE_MOON", 56),
+           "Proserpina": ("PROSERPINA", 57)}
+    if name not in ids:
+        return None
+    attr, fallback = ids[name]
+    body_id = getattr(swe, attr, fallback)
+    flags, _ = setup_zodiac_mode(settings or {})
+    try:
+        result = swe.calc_ut(julian_day, body_id, flags)
+    except Exception:
+        return None
+    coords = result[0]
+    longitude = normalize_longitude(float(coords[0]))
+    speed = float(coords[3]) if len(coords) > 3 else 0.0
+    sign, degree_in_sign = sign_from_longitude(longitude)
+    return {
+        "name": name,
+        "type": "point",
+        "longitude": round(longitude, 6),
+        "sign": sign,
+        "degree_in_sign": round(degree_in_sign, 6),
+        "speed_longitude": round(speed, 6),
+        "retrograde": speed < 0,
+    }

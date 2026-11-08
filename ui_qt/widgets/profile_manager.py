@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
     QInputDialog, QLineEdit
 )
 from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
+from PyQt6.QtWidgets import QSizePolicy
 from typing import List, Optional
 
 from astro_core.controllers import ProfileController
@@ -35,6 +36,12 @@ class ProfileManager(QWidget):
         
         # Profile list
         self.list_profiles = QListWidget()
+        self.list_profiles.setSizePolicy(QSizePolicy.Policy.Expanding,
+                                         QSizePolicy.Policy.Expanding)
+        self.setSizePolicy(QSizePolicy.Policy.Preferred,
+                           QSizePolicy.Policy.Preferred)  # MINEXP_MARKER
+        self.list_profiles.setSizePolicy(QSizePolicy.Policy.Expanding,
+                                         QSizePolicy.Policy.Expanding)
         self.list_profiles.setAlternatingRowColors(True)
         self.list_profiles.itemDoubleClicked.connect(self._on_item_double_clicked)
         layout.addWidget(self.list_profiles)
@@ -139,3 +146,13 @@ class ProfileManager(QWidget):
     def on_profile_saved(self):
         """Called when a profile is saved."""
         self.refresh()
+
+    def compact_height(self, rows=4):
+        """Высота блока по `rows` строкам списка без пустого места (итерация 37h)."""
+        lst = self.list_profiles
+        count = lst.count()
+        n = rows
+        row_h = lst.sizeHintForRow(0) if count > 0 else 24
+        list_h = n * row_h + 2 * lst.frameWidth() + 2
+        other = self.layout().totalSizeHint().height() - lst.sizeHint().height()
+        return max(60, list_h + other)

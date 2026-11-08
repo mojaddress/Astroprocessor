@@ -146,6 +146,9 @@ class DisplayProfileEditor(QWidget):
         self.chk_nodes.setChecked(True)
         self.chk_fortune = QCheckBox("Part of Fortune (Парс Фортуны)")
         self.chk_cross = QCheckBox("Крест")
+        self.chk_blackmoon = QCheckBox("Лилит (Чёрная Луна)")
+        self.chk_selena = QCheckBox("Селена (Белая Луна)")
+        self.chk_proserpina = QCheckBox("Прозерпина")
         self.chk_fortune.setChecked(True)
         self.chk_angles = QCheckBox("ASC / MC (Углы)")
         self.chk_angles.setChecked(True)
@@ -154,6 +157,9 @@ class DisplayProfileEditor(QWidget):
         special_layout.addWidget(self.chk_nodes)
         special_layout.addWidget(self.chk_fortune)
         special_layout.addWidget(self.chk_cross)
+        special_layout.addWidget(self.chk_blackmoon)
+        special_layout.addWidget(self.chk_selena)
+        special_layout.addWidget(self.chk_proserpina)
         special_layout.addWidget(self.chk_angles)
         
         layout.addWidget(special_group)
@@ -342,6 +348,9 @@ class DisplayProfileEditor(QWidget):
         self.chk_nodes.setChecked(objects.get("LunarNodes", True))
         self.chk_fortune.setChecked(objects.get("PartOfFortune", True))
         self.chk_cross.setChecked(objects.get("CrossOfFate", True))
+        self.chk_blackmoon.setChecked(objects.get("BlackMoon", True))
+        self.chk_selena.setChecked(objects.get("Selena", True))
+        self.chk_proserpina.setChecked(objects.get("Proserpina", True))
         self.chk_angles.setChecked(objects.get("Angles", True))
         
         # Aspects
@@ -384,6 +393,9 @@ class DisplayProfileEditor(QWidget):
         objects["LunarNodes"] = self.chk_nodes.isChecked()
         objects["PartOfFortune"] = self.chk_fortune.isChecked()
         objects["CrossOfFate"] = self.chk_cross.isChecked()
+        objects["BlackMoon"] = self.chk_blackmoon.isChecked()
+        objects["Selena"] = self.chk_selena.isChecked()
+        objects["Proserpina"] = self.chk_proserpina.isChecked()
         objects["Angles"] = self.chk_angles.isChecked()
         
         # Aspects
