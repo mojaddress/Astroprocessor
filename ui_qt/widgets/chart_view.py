@@ -1,6 +1,7 @@
 """
 Chart View — векторный виджет карты (финальная версия итерации 26).
 """
+from ui_qt import chart_theme  # CHART_THEME_V1
 import math
 from typing import Dict, List, Optional
 
@@ -160,7 +161,7 @@ class ChartView(QGraphicsView):
             self.setScene(self._scene)
             item = self._scene.addText(
                 "ДИАГНОЗ: получен только SVG, данные карты не переданы.")
-            item.setDefaultTextColor(QColor("#C0392B"))
+            item.setDefaultTextColor(chart_theme.adapt(QColor("#C0392B")))
             self._scene.setSceneRect(self._scene.itemsBoundingRect())
 
     def set_transit_data(self, transit_planets, transit_aspects):
@@ -182,7 +183,7 @@ class ChartView(QGraphicsView):
         self._scene = QGraphicsScene(0, 0, SCENE_SIZE, SCENE_SIZE, self)
         self.setScene(self._scene)
         self._scene.addRect(0, 0, SCENE_SIZE, SCENE_SIZE,
-                            QPen(Qt.PenStyle.NoPen), QBrush(QColor("white")))
+                            QPen(Qt.PenStyle.NoPen), QBrush(chart_theme.bg()))
         if self._is_synastry_mode:
             self._build_synastry()
         elif self._is_transit_mode:
@@ -209,7 +210,7 @@ class ChartView(QGraphicsView):
         return rom.get(int(n), str(n))
 
     def _pen(self, color, width, dash=False):
-        pen = QPen(QColor(color), width)
+        pen = QPen(chart_theme.adapt(QColor(color)), width)
         if dash:
             pen.setStyle(Qt.PenStyle.DashLine)
         pen.setCapStyle(Qt.PenCapStyle.RoundCap)
@@ -220,7 +221,7 @@ class ChartView(QGraphicsView):
         font = QFont("Segoe UI Symbol" if symbol else "Segoe UI", size)
         font.setBold(bold)
         item.setFont(font)
-        item.setBrush(QBrush(QColor(color)))
+        item.setBrush(QBrush(chart_theme.adapt(QColor(color))))
         r = item.boundingRect()
         item.setPos(x - r.width() / 2, y - r.height() / 2)
         self._scene.addItem(item)
@@ -231,7 +232,7 @@ class ChartView(QGraphicsView):
         font = QFont("Segoe UI", size)
         font.setBold(bold)
         item.setFont(font)
-        item.setBrush(QBrush(QColor(color)))
+        item.setBrush(QBrush(chart_theme.adapt(QColor(color))))
         r = item.boundingRect()
         item.setPos(x, y - r.height() / 2)
         self._scene.addItem(item)
@@ -251,7 +252,7 @@ class ChartView(QGraphicsView):
             item.setToolTip(tooltip)
         for rect in fills:
             f = self._scene.addEllipse(tr.mapRect(rect), QPen(Qt.PenStyle.NoPen),
-                                       QBrush(QColor(color)))
+                                       QBrush(chart_theme.adapt(QColor(color))))
             f.setZValue(5)
             if tooltip:
                 f.setToolTip(tooltip)
@@ -269,7 +270,7 @@ class ChartView(QGraphicsView):
     def _color(self, name, palette):
         override = self._settings.get(palette, {}) or {}
         base = PLANET_COLORS if palette == "planet_colors" else ASPECT_COLORS
-        return QColor(override.get(name, base.get(name, "#000000")))
+        return chart_theme.adapt(QColor(override.get(name, base.get(name, "#000000"))))
 
     def _format_tooltip(self, pl):
         name = pl.get("name", "?")
@@ -526,7 +527,7 @@ class ChartView(QGraphicsView):
             _point_colors = {"PartOfFortune": "#B8860B", "CrossOfFate": "#8E44AD",
                              "BlackMoon": "#1a1a1a", "Selena": "#90A4AE",
                              "Proserpina": "#00695C"}
-            color = QColor(_point_colors.get(name, "#666666"))
+            color = chart_theme.adapt(QColor(_point_colors.get(name, "#666666")))
             tip = self._format_tooltip(pt)
             dot = self._scene.addEllipse(QRectF(pos.x() - dot_r, pos.y() - dot_r,
                                                 2 * dot_r, 2 * dot_r),
@@ -766,7 +767,7 @@ class ChartView(QGraphicsView):
 
     def render_to_image(self, width, height):
         image = QImage(width, height, QImage.Format.Format_ARGB32)
-        image.fill(QColor("white"))
+        image.fill(chart_theme.bg())
         painter = QPainter(image)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)

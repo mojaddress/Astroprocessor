@@ -1,6 +1,5 @@
 pyswisseph>=2.10.0
 pytest>=8.0.0
-streamlit
 pandas
 tzdata
-PyQt6
+PyQt6>=6.8.0

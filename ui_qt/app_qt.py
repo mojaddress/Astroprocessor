@@ -9,6 +9,7 @@ import os
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QFontDatabase
 from ui_qt.main_window import MainWindow
+from ui_qt.theme_manager import add_theme_menu, apply_theme, load_theme_mode
 
 
 def register_fonts():
@@ -47,6 +48,7 @@ def main():
 
     sys.excepthook = _excepthook
     app = QApplication(sys.argv)
+    apply_theme(app, load_theme_mode())
     
     # Register fonts for SVG rendering
     register_fonts()
@@ -58,6 +60,7 @@ def main():
     # Create and show main window
     window = MainWindow()
     window.show()
+    add_theme_menu(window)
     
     # Execute the application
     sys.exit(app.exec())
