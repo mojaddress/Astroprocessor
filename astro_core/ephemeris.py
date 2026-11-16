@@ -465,7 +465,7 @@ def get_planet_position(julian_day, planet_name, settings=None):
 def calculate_hypothetical_point(julian_day, name, settings=None):
     """Точки русской школы: Лилит (средний апогей), Селена, Прозерпина.
 
-    Селена и Прозерпина требуют файл seorbel.elc в папке эфемерид;
+    Селена и Прозерпина требуют файл seorbel.txt в папке эфемерид;
     при его отсутствии возвращается None (итерация 39, D-82).
     """
     ids = {"BlackMoon": ("MEAN_APOGEE", 12),

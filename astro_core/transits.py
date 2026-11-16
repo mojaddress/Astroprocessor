@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from bisect import bisect_left
 
 from .constants import ASPECT_DEFINITIONS, DEFAULT_SETTINGS, DEFAULT_TRANSIT_PLANETS
 from .ephemeris import calculate_objects, initialize_ephemeris, get_planet_position
@@ -354,7 +355,185 @@ def get_step_for_planet(planet_name):
         return 1.0  # 1 день
 
 
+# --- Быстрый поиск точных транзитов --- TRANSIT_FAST_V1
+def _build_planet_track(jd_start, jd_end, planet_name, step_days, settings=None, cancel=None):
+    """Один проход по периоду: список (jd, longitude, speed).
+
+    Ключевая оптимизация: трек планеты считается один раз, а не заново для
+    каждой пары (натальная точка, аспект, целевая долгота).
+    """
+    track = []
+    jd = jd_start
+    index = 0
+    while jd <= jd_end:
+        if cancel is not None and index % 512 == 0:
+            cancel()
+        lon, speed = get_planet_position(jd, planet_name, settings)
+        track.append((jd, lon, speed))
+        jd += step_days
+        index += 1
+    return track
+
+
+def _refine_crossing_fast(jd_low, jd_high, planet_name, target_longitude, settings=None,
+                          tol_deg=1e-9, max_iterations=60):
+    """Уточнение пересечения методом Иллинойса (хорда с защитой от застоя).
+
+    Скобка сохраняется, сходимость сверхлинейная: обычно 4-7 обращений
+    к эфемеридам вместо ~100 у бинарного поиска.
+    """
+    lon_low, _ = get_planet_position(jd_low, planet_name, settings)
+    f_low = normalize_diff(lon_low - target_longitude)
+    lon_high, _ = get_planet_position(jd_high, planet_name, settings)
+    f_high = normalize_diff(lon_high - target_longitude)
+    if f_low == 0.0:
+        return jd_low
+    if f_high == 0.0:
+        return jd_high
+    if (f_low > 0.0) == (f_high > 0.0):
+        return (jd_low + jd_high) / 2.0
+
+    jd_mid = (jd_low + jd_high) / 2.0
+    side = 0
+    for _ in range(max_iterations):
+        denominator = f_high - f_low
+        if denominator == 0.0:
+            jd_mid = (jd_low + jd_high) / 2.0
+        else:
+            jd_mid = (jd_low * f_high - jd_high * f_low) / denominator
+        if not (min(jd_low, jd_high) < jd_mid < max(jd_low, jd_high)):
+            jd_mid = (jd_low + jd_high) / 2.0
+
+        lon_mid, _ = get_planet_position(jd_mid, planet_name, settings)
+        f_mid = normalize_diff(lon_mid - target_longitude)
+        if abs(f_mid) < tol_deg:
+            return jd_mid
+
+        if (f_mid > 0.0) == (f_low > 0.0):
+            jd_low, f_low = jd_mid, f_mid
+            if side == -1:
+                f_high *= 0.5
+            side = -1
+        else:
+            jd_high, f_high = jd_mid, f_mid
+            if side == 1:
+                f_low *= 0.5
+            side = 1
+    return jd_mid
+
+
+def _arc_segments(lon_prev, delta):
+    """Отрезки внутри [0, 360), покрывающие дугу движения планеты за шаг."""
+    lo = lon_prev % 360.0
+    hi = lo + delta
+    if delta > 0.0:
+        if hi <= 360.0:
+            return ((lo, hi),)
+        return ((lo, 360.0), (0.0, hi - 360.0))
+    if hi >= 0.0:
+        return ((hi, lo),)
+    return ((hi + 360.0, 360.0), (0.0, lo))
+
+
+def _crossings_from_track(track, targets_sorted, planet_name, settings=None, cancel=None):
+    """На каждом шаге трека ищет цели внутри пройденной дуги (bisect)."""
+    for index in range(1, len(track)):
+        if cancel is not None and index % 1024 == 0:
+            cancel()
+        jd_prev, lon_prev, _ = track[index - 1]
+        jd_curr, lon_curr, _ = track[index]
+        delta = normalize_diff(lon_curr - lon_prev)
+        if delta == 0.0:
+            continue
+        for seg_lo, seg_hi in _arc_segments(lon_prev, delta):
+            left = bisect_left(targets_sorted, seg_lo)
+            right = bisect_left(targets_sorted, seg_hi)
+            for k in range(left, right):
+                target = targets_sorted[k]
+                yield target, _refine_crossing_fast(
+                    jd_prev, jd_curr, planet_name, target, settings
+                )
+
+
 def find_transit_events(natal_objects, start_date, end_date, settings=None,
+                        filter_planets=None, filter_aspects=None,
+                        progress=None, cancel=None):
+    """Находит точные моменты транзитных аспектов за период (быстрая версия).
+
+    Контракт и состав событий совпадают с find_transit_events_legacy
+    (проверяется тестом эквивалентности). Отличия — только в скорости:
+      * трек планеты строится один раз за период;
+      * цели ищутся бисекцией по отсортированному списку внутри дуги шага;
+      * момент уточняется методом Иллинойса.
+
+    progress(percent, message) и cancel() - необязательные колбэки;
+    cancel() может бросить исключение для прерывания расчёта.
+    """
+    if settings is None:
+        settings = DEFAULT_SETTINGS
+
+    enabled_aspects = set(settings.get("enabled_aspects", DEFAULT_SETTINGS.get("enabled_aspects", [])))
+    if filter_aspects:
+        enabled_aspects = enabled_aspects.intersection(set(filter_aspects))
+
+    transit_planets = settings.get("transit_planets", DEFAULT_TRANSIT_PLANETS)
+    if filter_planets:
+        transit_planets = [p for p in transit_planets if p in filter_planets]
+
+    start_local, start_utc = parse_local_datetime(start_date, "00:00", 0)
+    end_local, end_utc = parse_local_datetime(end_date, "23:59", 0)
+    jd_start = datetime_to_jd(start_utc)
+    jd_end = datetime_to_jd(end_utc)
+
+    # Цели не зависят от транзитной планеты: строим один раз.
+    targets_map = {}
+    for natal_obj in natal_objects:
+        if "longitude" not in natal_obj or "name" not in natal_obj:
+            continue
+        for aspect_def in ASPECT_DEFINITIONS:
+            aspect_name = aspect_def["name"]
+            if aspect_name not in enabled_aspects:
+                continue
+            for target in get_aspect_target_longitudes(natal_obj["longitude"], aspect_def["angle"]):
+                targets_map.setdefault(target, []).append((natal_obj["name"], aspect_name))
+
+    events = []
+    if not targets_map or not transit_planets:
+        return events
+
+    targets_sorted = sorted(targets_map)
+    total = len(transit_planets)
+
+    for index, planet_name in enumerate(transit_planets):
+        if cancel is not None:
+            cancel()
+        step_days = get_step_for_planet(planet_name)
+        track = _build_planet_track(jd_start, jd_end, planet_name, step_days, settings, cancel)
+
+        for target, jd in _crossings_from_track(track, targets_sorted, planet_name, settings, cancel):
+            _, speed = get_planet_position(jd, planet_name, settings)
+            direction = "retrograde" if speed < 0 else "direct"
+            exact_dt = jd_to_datetime(jd)
+            for natal_name, aspect_name in targets_map[target]:
+                events.append({
+                    "transit_planet": planet_name,
+                    "natal_point": natal_name,
+                    "aspect": aspect_name,
+                    "target_longitude": round(target, 6),
+                    "exact_jd": jd,
+                    "exact_datetime": exact_dt.isoformat(),
+                    "direction": direction,
+                    "orb": 0.0,
+                })
+
+        if progress is not None:
+            progress(int((index + 1) * 100 / total), f"{planet_name}: событий {len(events)}")
+
+    events.sort(key=lambda e: e["exact_jd"])
+    return events
+
+
+def find_transit_events_legacy(natal_objects, start_date, end_date, settings=None,
                         filter_planets=None, filter_aspects=None):
     """
     Находит все события транзитов за период с точными датами.
