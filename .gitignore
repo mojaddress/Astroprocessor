@@ -49,3 +49,8 @@ Thumbs.db
 *.log
 pip-*/
 logs/
+
+# Данные Swiss Ephemeris: не распространяются через репозиторий.
+# Лицензия Astrodienst (AGPL-3.0 или коммерческая). Получение: py -3.11 fetch_ephe.py
+ephe/*
+!ephe/README.md
