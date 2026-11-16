@@ -54,3 +54,19 @@ logs/
 # Лицензия Astrodienst (AGPL-3.0 или коммерческая). Получение: py -3.11 fetch_ephe.py
 ephe/*
 !ephe/README.md
+
+# --- ASTRO_CLEANUP_V1 ---
+# Артефакты сборки: не хранятся в репозитории (в т.ч. установщик 60+ МБ)
+build/
+dist/
+installer_output/
+*.exe
+
+# Персональные профили рождения: только локально.
+# В репозитории - README и обезличенный пример.
+profiles/*
+!profiles/README.md
+!profiles/example.json
+
+# Служебные файлы инструментов разработки
+.kilo/

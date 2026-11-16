@@ -2,20 +2,28 @@
 # Run with: pyinstaller --clean AstroProcessor.spec
 
 import sys
+import os
 from pathlib import Path
 
 # Project root - spec file is in the same directory as this script
 PROJECT_ROOT = Path.cwd()
 
 # Data files to include
+# ASTRO_CLEANUP_V1: файлы эфемерид НЕ включаются в распространяемую сборку.
+# Они лицензированы Astrodienst (AGPL-3.0 или коммерческая лицензия), поэтому
+# публичный установщик не должен их содержать. Пользователь получает их отдельно
+# (см. ephe/README.md). Для ЛИЧНОЙ сборки с данными: ASTRO_BUNDLE_EPHE=1.
+BUNDLE_EPHE = os.environ.get("ASTRO_BUNDLE_EPHE", "0") == "1"
+
 data_files = [
-    # Ephemeris files
-    ("ephe", "ephe"),
     # Cities database
     ("data/cities.json", "data"),
     # Settings template
     ("config/default_settings.json", "config"),
 ]
+
+if BUNDLE_EPHE:
+    data_files.append(("ephe", "ephe"))
 
 # Hidden imports
 hidden_imports = [
