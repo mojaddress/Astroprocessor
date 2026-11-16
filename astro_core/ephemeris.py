@@ -7,6 +7,9 @@ from .constants import (
     HOUSE_SYSTEM_CODES,
 )
 from .utils import normalize_longitude, sign_from_longitude
+import functools  # CACHE_INTEGRATION_V1
+from . import ephemeris_cache  # CACHE_INTEGRATION_V1
+
 
 try:
     import swisseph as swe
@@ -36,6 +39,45 @@ PLANET_NAMES = [
 ]
 
 
+# --- Интеграция кэша эфемерид --- CACHE_INTEGRATION_V1
+def _ephemeris_state(args, kwargs):
+    """Снимок настроек, влияющих на глобальное состояние Swiss Ephemeris."""
+    settings = None
+    for value in args:
+        if isinstance(value, dict):
+            settings = value
+            break
+    if settings is None:
+        settings = kwargs.get("settings")
+    settings = settings or {}
+    zodiac = str(settings.get("zodiac", "tropical")).lower()
+    ayanamsha = settings.get("ayanamsha", settings.get("ayanamsha_id", ""))
+    ephe_path = str(settings.get("ephe_path", ""))
+    return {"zodiac": zodiac, "ayanamsha": repr(ayanamsha), "ephe_path": ephe_path}
+
+
+def _invalidates_ephemeris_cache(func):
+    """Сбрасывает кэш ТОЛЬКО при изменении зодиака/аянамши/пути эфемерид.  # CACHE_STATE_V2
+
+    initialize_ephemeris и setup_zodiac_mode вызываются на каждом расчёте,
+    поэтому безусловный сброс уничтожал кэш (0% попаданий, только накладные).
+    set_context сам сравнивает контекст и очищает кэш лишь при изменении.
+    """
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        state = _ephemeris_state(args, kwargs)
+        try:
+            ephemeris_cache.set_context(**state)
+        except RuntimeError:
+            # Swiss Ephemeris недоступен: кэш не создан, сбрасывать нечего.
+            pass
+        return func(*args, **kwargs)
+    return wrapper
+
+
+_cached_calc_ut = ephemeris_cache.calc_ut
+
+
 def ensure_swisseph():
     """
     Проверяет, что Swiss Ephemeris доступен.
@@ -47,6 +89,7 @@ def ensure_swisseph():
         )
 
 
+@_invalidates_ephemeris_cache
 def initialize_ephemeris(settings):
     """
     Указывает Swiss Ephemeris папку с файлами эфемерид.
@@ -113,6 +156,7 @@ def get_planet_id(name):
     return int(mapping[name])
 
 
+@_invalidates_ephemeris_cache
 def setup_zodiac_mode(settings):
     """
     Настраивает режим зодиака (тропический или сидерический).
@@ -220,7 +264,7 @@ def calculate_objects(julian_day, settings=None):
     for planet_name in PLANET_NAMES:
         try:
             planet_id = get_planet_id(planet_name)
-            result = swe.calc_ut(julian_day, planet_id, flags)
+            result = _cached_calc_ut(julian_day, planet_id, flags)
             coords = result[0]
 
             longitude = normalize_longitude(float(coords[0]))
@@ -252,7 +296,7 @@ def calculate_objects(julian_day, settings=None):
         try:
             node_name = "MeanNode" if node_type == "mean" else "TrueNode"
             node_id = get_planet_id(node_name)
-            result = swe.calc_ut(julian_day, node_id, flags)
+            result = _cached_calc_ut(julian_day, node_id, flags)
             coords = result[0]
 
             longitude = normalize_longitude(float(coords[0]))
@@ -294,7 +338,7 @@ def calculate_objects(julian_day, settings=None):
     if include_chiron:
         try:
             chiron_id = get_planet_id("Chiron")
-            result = swe.calc_ut(julian_day, chiron_id, flags)
+            result = _cached_calc_ut(julian_day, chiron_id, flags)
             coords = result[0]
 
             longitude = normalize_longitude(float(coords[0]))
@@ -409,7 +453,7 @@ def get_planet_position(julian_day, planet_name, settings=None):
 
     planet_id = get_planet_id(planet_name)
 
-    result = swe.calc_ut(julian_day, planet_id, flags)
+    result = _cached_calc_ut(julian_day, planet_id, flags)
     coords = result[0]
 
     longitude = normalize_longitude(float(coords[0]))
@@ -433,7 +477,7 @@ def calculate_hypothetical_point(julian_day, name, settings=None):
     body_id = getattr(swe, attr, fallback)
     flags, _ = setup_zodiac_mode(settings or {})
     try:
-        result = swe.calc_ut(julian_day, body_id, flags)
+        result = _cached_calc_ut(julian_day, body_id, flags)
     except Exception:
         return None
     coords = result[0]

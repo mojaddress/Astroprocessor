@@ -19,6 +19,9 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+.pytest_cache/
+*.bak_*
+*.whl
 
 # Virtual environments (ОЧЕНЬ ВАЖНО)
 .venv/
@@ -45,3 +48,4 @@ Thumbs.db
 # Logs
 *.log
 pip-*/
+logs/
