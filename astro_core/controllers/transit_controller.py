@@ -61,6 +61,8 @@ class TransitController:
         filter_planets: Optional[list] = None,
         filter_aspects: Optional[list] = None,
         display_profile_name: Optional[str] = None,
+        progress=None,
+        cancel=None,
     ) -> list:
         """
         Calculate transits for a period.
@@ -97,12 +99,14 @@ class TransitController:
         if mode == "periods":
             result = find_transit_periods(
                 natal_objects, start_date, end_date, transit_settings,
-                filter_planets=filter_p, filter_aspects=filter_a
+                filter_planets=filter_p, filter_aspects=filter_a,
+                progress=progress, cancel=cancel
             )
         elif mode == "precise":
             result = find_transit_events(
                 natal_objects, start_date, end_date, transit_settings,
-                filter_planets=filter_p, filter_aspects=filter_a
+                filter_planets=filter_p, filter_aspects=filter_a,
+                progress=progress, cancel=cancel
             )
         else:
             result = get_transit_calendar(

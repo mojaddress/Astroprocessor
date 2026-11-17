@@ -7,6 +7,22 @@ from .time_service import parse_local_datetime, datetime_to_jd, jd_to_datetime
 from .utils import angle_between
 
 
+def _transit_settings(settings):
+    """Убирает None-значения из настроек: None означает «не задано».  # TRANSIT_NONE_GUARD
+
+    Контроллер может передавать явные None (enabled_aspects=None и т.п.),
+    а ядро читает значения через .get(key, default) - default применяется
+    только к отсутствующему ключу, но не к None. Без нормализации расчёт
+    падал с TypeError при вызове без профиля отображения.
+
+    Важно: пустой список сохраняется как есть - он означает «явно ничего»,
+    а не «по умолчанию».
+    """
+    if settings is None:
+        return DEFAULT_SETTINGS
+    return {key: value for key, value in settings.items() if value is not None}
+
+
 def calculate_transit_positions(julian_day, settings=None):
     """
     Рассчитывает положения транзитных планет на заданную дату.
@@ -27,8 +43,7 @@ def calculate_transit_positions(julian_day, settings=None):
         transit_objects, warnings
     """
 
-    if settings is None:
-        settings = {}
+    settings = {k: v for k, v in (settings or {}).items() if v is not None}  # TRANSIT_NONE_GUARD
 
     # Инициализируем путь к эфемеридам, если он указан.
     initialize_ephemeris(settings)
@@ -65,8 +80,7 @@ def find_transits_on_date(natal_objects, transit_objects, settings=None):
         список транзитов
     """
 
-    if settings is None:
-        settings = DEFAULT_SETTINGS
+    settings = _transit_settings(settings)  # TRANSIT_NONE_GUARD
 
     transits = []
 
@@ -144,8 +158,7 @@ def get_transit_calendar(natal_objects, start_date, end_date, settings=None,
         список транзитов с датами
     """
 
-    if settings is None:
-        settings = DEFAULT_SETTINGS
+    settings = _transit_settings(settings)  # TRANSIT_NONE_GUARD
 
     calendar = []
 
@@ -469,8 +482,7 @@ def find_transit_events(natal_objects, start_date, end_date, settings=None,
     progress(percent, message) и cancel() - необязательные колбэки;
     cancel() может бросить исключение для прерывания расчёта.
     """
-    if settings is None:
-        settings = DEFAULT_SETTINGS
+    settings = _transit_settings(settings)  # TRANSIT_NONE_GUARD
 
     enabled_aspects = set(settings.get("enabled_aspects", DEFAULT_SETTINGS.get("enabled_aspects", [])))
     if filter_aspects:
@@ -557,8 +569,7 @@ def find_transit_events_legacy(natal_objects, start_date, end_date, settings=Non
         список событий транзитов, отсортированных по дате
     """
 
-    if settings is None:
-        settings = DEFAULT_SETTINGS
+    settings = _transit_settings(settings)  # TRANSIT_NONE_GUARD
 
     events = []
 
@@ -748,8 +759,7 @@ def find_transit_periods(natal_objects, start_date, end_date, settings=None,
     для медленных планет находятся реально, а не схлопываются в точку.
     progress(percent, message) и cancel() - необязательные колбэки.
     """
-    if settings is None:
-        settings = DEFAULT_SETTINGS
+    settings = _transit_settings(settings)  # TRANSIT_NONE_GUARD
 
     events = find_transit_events(
         natal_objects, start_date, end_date, settings,
@@ -924,8 +934,7 @@ def find_transit_periods_legacy(natal_objects, start_date, end_date, settings=No
         список периодов активности транзитов, отсортированных по дате пика
     """
 
-    if settings is None:
-        settings = DEFAULT_SETTINGS
+    settings = _transit_settings(settings)  # TRANSIT_NONE_GUARD
 
     # Сначала находим все точные аспекты с учётом фильтрации
     events = find_transit_events(

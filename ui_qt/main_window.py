@@ -56,6 +56,7 @@ from ui_qt.models.chart_model import (
     create_model_for_progression_aspects
 )
 from ui_qt.dialogs.settings_dialog import SettingsDialog
+from ui_qt.background import BackgroundRunner  # BG_WIRE_V1
 
 
 class MainWindow(QMainWindow):
@@ -78,6 +79,8 @@ class MainWindow(QMainWindow):
         self._city_controller = CityController()
         self._profile_controller = ProfileController()
         self._state_manager = StateManager()
+        # Один рабочий поток на все расчёты: Swiss Ephemeris не потокобезопасна.
+        self._background = BackgroundRunner(self)  # BG_WIRE_V1
         
         # State tracking
         self._current_birth_data = None
@@ -195,7 +198,7 @@ class MainWindow(QMainWindow):
             self._display_profile_controller
         )
         
-    def _update_transit_chart_view(self, mode: str):
+    def _update_transit_chart_view(self, mode: str, precomputed=None):
         """Calculate and display transit chart overlay on natal chart."""
         if not self._current_chart_result:
             return
@@ -208,7 +211,7 @@ class MainWindow(QMainWindow):
                 start_date = self._transit_panel.edit_start_date.date().toPyDate()
                 end_date = self._transit_panel.edit_end_date.date().toPyDate()
 
-            transit_result = self._transit_controller.calculate_transits(
+            transit_result = precomputed if precomputed is not None else self._transit_controller.calculate_transits(
                 natal_objects=self._current_chart_result.get("objects", []),
                 start_date=start_date.strftime("%Y-%m-%d"),
                 end_date=end_date.strftime("%Y-%m-%d"),
@@ -900,15 +903,23 @@ class MainWindow(QMainWindow):
             self._status_label.setText("Ошибка расчёта карты")
             
     def _handle_calculate_transits(self, mode: str, start_date, end_date, planets: list, aspects: list):
-        """Handle transit calculation request."""
+        """Транзиты: быстрый режим синхронно, тяжёлые - в фоне (BG_WIRE_V1)."""
         if not self._current_chart_result:
             QMessageBox.warning(self, "Предупреждение", "Сначала рассчитайте натальную карту")
             return
-            
+        if self._background.busy:
+            self._status_label.setText("Дождитесь завершения текущего расчёта")
+            return
+
+        if mode == "calendar":
+            self._calculate_transits_sync(mode, start_date, end_date, planets, aspects)
+        else:
+            self._calculate_transits_background(mode, start_date, end_date, planets, aspects)
+
+    def _calculate_transits_sync(self, mode, start_date, end_date, planets, aspects):
+        """Быстрый режим: расчёт в главном потоке (годы укладываются в десятки мс)."""
         self._show_progress("Расчёт транзитов...")
-        
         try:
-            # Calculate transits
             result = self._transit_controller.calculate_transits(
                 natal_objects=self._current_chart_result.get("objects", []),
                 start_date=start_date.strftime("%Y-%m-%d"),
@@ -917,29 +928,98 @@ class MainWindow(QMainWindow):
                 mode=mode,
                 filter_planets=planets if planets else None,
                 filter_aspects=aspects if aspects else None,
-                display_profile_name=self._current_display_profile_name
+                display_profile_name=self._current_display_profile_name,
             )
-            
-            # Display results in table
-            self._transit_panel.set_results(result)
-            
-            # Calculate and display transit chart overlay
-            if mode in ["calendar", "precise", "periods"]:
-                self._update_transit_chart_view(mode)
-            
-            # Enable transit toggle
-            self._transit_available = True
-            self._update_transit_toggle_visibility()
-            
-            self._hide_progress()
-            self._status_label.setText(f"Транзиты рассчитаны: {len(result)} записей")
-            self._save_state()
-            
+            self._finish_transits(mode, result, planets, aspects)
         except Exception as e:
             self._hide_progress()
-            QMessageBox.critical(self, "Ошибка расчёта транзитов", f"Не удалось рассчитать транзиты:\n{str(e)}")
+            QMessageBox.critical(self, "Ошибка расчёта транзитов",
+                                 f"Не удалось рассчитать транзиты:\n{str(e)}")
             self._status_label.setText("Ошибка расчёта транзитов")
-            
+
+    def _calculate_transits_background(self, mode, start_date, end_date, planets, aspects):
+        """Точные транзиты и периоды: фон + прогресс + отмена.
+
+        Диалог модальный: он блокирует ввод в окно, поэтому параллельные
+        расчёты (в том числе автопересчёт при смене темы) невозможны -
+        это требование потокобезопасности Swiss Ephemeris.
+        """
+        from PyQt6.QtWidgets import QProgressDialog
+
+        dialog = QProgressDialog("Расчёт транзитов…", "Отмена", 0, 100, self)
+        dialog.setWindowTitle("Astro Processor")
+        dialog.setWindowModality(Qt.WindowModality.WindowModal)
+        dialog.setMinimumDuration(150)
+        dialog.setAutoClose(False)
+        dialog.setAutoReset(False)
+        dialog.setValue(0)
+        dialog.canceled.connect(self._background.cancel)
+
+        natal_objects = self._current_chart_result.get("objects", [])
+        settings = self._transit_controller.get_default_settings()
+        profile_name = self._current_display_profile_name
+        filter_p = planets if planets else None
+        filter_a = aspects if aspects else None
+        start_str = start_date.strftime("%Y-%m-%d")
+        end_str = end_date.strftime("%Y-%m-%d")
+
+        def task(token, report):
+            return self._transit_controller.calculate_transits(
+                natal_objects=natal_objects,
+                start_date=start_str,
+                end_date=end_str,
+                settings=settings,
+                mode=mode,
+                filter_planets=filter_p,
+                filter_aspects=filter_a,
+                display_profile_name=profile_name,
+                progress=report,
+                cancel=token.raise_if_cancelled,
+            )
+
+        def on_progress(percent, message):
+            dialog.setValue(int(percent))
+            dialog.setLabelText(f"Расчёт транзитов: {message}")
+
+        def on_done(result):
+            dialog.close()
+            try:
+                self._finish_transits(mode, result, planets, aspects)
+            except Exception as exc:
+                QMessageBox.critical(self, "Ошибка отображения транзитов", str(exc))
+                self._status_label.setText("Ошибка отображения транзитов")
+
+        def on_error(text):
+            dialog.close()
+            QMessageBox.critical(self, "Ошибка расчёта транзитов", text)
+            self._status_label.setText("Ошибка расчёта транзитов")
+
+        def on_cancelled():
+            dialog.close()
+            self._status_label.setText("Расчёт транзитов отменён")
+
+        self._background.submit(
+            task,
+            on_done=on_done,
+            on_progress=on_progress,
+            on_error=on_error,
+            on_cancelled=on_cancelled,
+        )
+
+    def _finish_transits(self, mode, result, planets, aspects):
+        """Постобработка результата: таблица, карта, статус (общая для фона и синхрона)."""
+        self._transit_panel.set_results(result)
+        # Для periods без фильтров карта использует тот же результат -
+        # повторный расчёт того же самого не нужен (экономия ~400 мс на год).
+        precomputed = result if (mode == "periods" and not planets and not aspects) else None
+        if mode in ("calendar", "precise", "periods"):
+            self._update_transit_chart_view(mode, precomputed=precomputed)
+        self._transit_available = True
+        self._update_transit_toggle_visibility()
+        self._hide_progress()
+        self._status_label.setText(f"Транзиты рассчитаны: {len(result)} записей")
+        self._save_state()
+
     def _on_show_interpretation(self):
         """Переключает на вкладку Разбор."""
         self._calc_tabs.setCurrentWidget(self._interpretation_panel)
