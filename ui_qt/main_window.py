@@ -57,6 +57,7 @@ from ui_qt.models.chart_model import (
 )
 from ui_qt.dialogs.settings_dialog import SettingsDialog
 from ui_qt.background import BackgroundRunner  # BG_WIRE_V1
+from ui_qt.time_slider import TimeSlider  # TIME_SLIDER_V1
 
 
 class MainWindow(QMainWindow):
@@ -81,6 +82,12 @@ class MainWindow(QMainWindow):
         self._state_manager = StateManager()
         # Один рабочий поток на все расчёты: Swiss Ephemeris не потокобезопасна.
         self._background = BackgroundRunner(self)  # BG_WIRE_V1
+        # Ползунок времени: троттлинг перерисовки (TIME_SLIDER_V1)
+        self._slider_pending = None
+        self._slider_timer = QTimer(self)
+        self._slider_timer.setSingleShot(True)
+        self._slider_timer.setInterval(40)
+        self._slider_timer.timeout.connect(self._apply_slider_date)
         
         # State tracking
         self._current_birth_data = None
@@ -139,6 +146,14 @@ class MainWindow(QMainWindow):
         
         # CENTER PANE - Chart View (main focus)
         self._chart_view = ChartView()
+        # Ползунок времени под картой (TIME_SLIDER_V1)
+        self._time_slider = TimeSlider()
+        center_panel = QWidget()
+        center_layout = QVBoxLayout(center_panel)
+        center_layout.setContentsMargins(0, 0, 0, 0)
+        center_layout.setSpacing(2)
+        center_layout.addWidget(self._chart_view, 1)
+        center_layout.addWidget(self._time_slider, 0)
         
         # RIGHT PANE - Tabbed interface for calculations
         right_panel = QWidget()
@@ -181,7 +196,7 @@ class MainWindow(QMainWindow):
         
         # Add three panes to splitter: Left | Center (Chart) | Right
         self._main_splitter.addWidget(left_panel)
-        self._main_splitter.addWidget(self._chart_view)
+        self._main_splitter.addWidget(center_panel)  # TIME_SLIDER_V1
         self._main_splitter.addWidget(right_panel)
         
         # Set splitter sizes: Left 25%, Center 50%, Right 25%
@@ -223,9 +238,9 @@ class MainWindow(QMainWindow):
             )
             self._current_transit_result = transit_result
 
-            transit_planets = self._extract_transit_planets_for_chart(
-                transit_result, start_date, end_date)
-            transit_aspects = self._extract_transit_aspects_for_chart(transit_result)
+            # Положения берутся из эфемерид, а не из полей событий (TIME_SLIDER_V1)
+            transit_planets, transit_aspects = self._transit_layer(
+                self._transit_panel.edit_transit_date.date())
 
             display_settings = self._get_display_settings()
             self._chart_view.set_transit_chart_data(
@@ -520,6 +535,7 @@ class MainWindow(QMainWindow):
         
         # Transit panel signals
         self._transit_panel.calculate_requested.connect(self._handle_calculate_transits)
+        self._time_slider.date_changed.connect(self._on_time_slider_date)  # TIME_SLIDER_V1
         
         # Progression panel signals
         self._progression_panel.calculate_requested.connect(self._handle_calculate_progressions)
@@ -892,6 +908,8 @@ class MainWindow(QMainWindow):
             natal_objects = result.get("objects", [])
             chart_settings = result.get("settings", {})
             self._transit_panel.set_natal_data(natal_objects, chart_settings)
+            self._time_slider.set_anchor(  # TIME_SLIDER_V1
+                self._transit_panel.edit_transit_date.date())
             
             self._hide_progress()
             self._status_label.setText(f"Карта рассчитана: {birth_data.get('name', 'Chart')}")
@@ -944,6 +962,7 @@ class MainWindow(QMainWindow):
         расчёты (в том числе автопересчёт при смене темы) невозможны -
         это требование потокобезопасности Swiss Ephemeris.
         """
+        self._time_slider.stop()  # TIME_SLIDER_V1: анимация не мешает расчёту
         from PyQt6.QtWidgets import QProgressDialog
 
         dialog = QProgressDialog("Расчёт транзитов…", "Отмена", 0, 100, self)
@@ -1019,6 +1038,62 @@ class MainWindow(QMainWindow):
         self._hide_progress()
         self._status_label.setText(f"Транзиты рассчитаны: {len(result)} записей")
         self._save_state()
+
+    def _transit_layer(self, qdate):
+        """Реальные положения транзитных планет и аспекты к наталу на дату.  # TIME_SLIDER_V1
+
+        Важно: положения берутся из эфемерид. Прежний способ читал
+        event["transit_longitude"], которого нет у событий точного режима
+        и периодов активности, из-за чего все планеты ставились в 0° Овна.
+        """
+        from astro_core.transits import calculate_transit_positions, find_transits_on_date
+        from astro_core.time_service import parse_local_datetime, datetime_to_jd
+
+        settings = dict(self._current_chart_result.get("settings", {}) or {})
+        if settings.get("enabled_planets"):
+            settings["transit_planets"] = list(settings["enabled_planets"])
+        _local, utc = parse_local_datetime(
+            qdate.toString("yyyy-MM-dd"), "12:00", settings.get("transit_utc_offset", 0))
+        julian_day = datetime_to_jd(utc)
+        transit_objects, _warnings = calculate_transit_positions(julian_day, settings)
+        aspects = find_transits_on_date(
+            self._current_chart_result.get("objects", []), transit_objects, settings)
+        return transit_objects, aspects
+
+    def _on_time_slider_date(self, qdate):
+        """Запрос обновления транзитного слоя с ползунка (TIME_SLIDER_V1)."""
+        if not self._current_chart_result or self._background.busy:
+            return
+        self._slider_pending = qdate
+        self._transit_panel.edit_transit_date.setDate(qdate)
+        if not self._slider_timer.isActive():
+            self._slider_timer.start()
+
+    def _apply_slider_date(self):
+        """Перерисовка транзитного слоя на дату ползунка (не чаще 25 раз/с)."""
+        qdate = self._slider_pending
+        self._slider_pending = None
+        if qdate is None or not self._current_chart_result or self._background.busy:
+            return
+        try:
+            transit_planets, transit_aspects = self._transit_layer(qdate)
+            self._chart_view.set_transit_chart_data(
+                natal_chart=self._current_chart_result,
+                transit_planets=transit_planets,
+                transit_aspects=transit_aspects,
+                display_settings=self._get_display_settings(),
+            )
+            self._last_transit_planets = transit_planets
+            self._last_transit_aspects = transit_aspects
+            self._current_transit_result = transit_aspects
+            self._chart_mode = "transit"
+            self._transit_available = True
+            self._update_transit_toggle_visibility()
+            self._status_label.setText(
+                f"Транзиты на {qdate.toString('dd.MM.yyyy')}: {len(transit_aspects)} аспектов")
+        except Exception as exc:
+            self._time_slider.stop()
+            self._status_label.setText(f"Ошибка обновления транзитов: {exc}")
 
     def _on_show_interpretation(self):
         """Переключает на вкладку Разбор."""

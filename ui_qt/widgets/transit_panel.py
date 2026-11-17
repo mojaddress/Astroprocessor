@@ -159,7 +159,25 @@ class TransitPanel(QWidget):
         
         layout.addWidget(period_group)
         
-        # --- Calculate Button ---
+        # --- Calculate Button --- TRANSIT_UX_V1
+        self.btn_calculate = QPushButton("🔄 Рассчитать транзиты")
+        self.btn_calculate.setToolTip("Пересчитать с текущими настройками (F6)")
+        self.btn_calculate.clicked.connect(self._on_calculate)
+        layout.addWidget(self.btn_calculate)
+
+        preset_row = QHBoxLayout()
+        preset_row.addWidget(QLabel("Диапазон:"))
+        self.btn_range_month = QPushButton("1 мес")
+        self.btn_range_year = QPushButton("1 год")
+        self.btn_range_five_years = QPushButton("5 лет")
+        for button, days in ((self.btn_range_month, 30),
+                             (self.btn_range_year, 365),
+                             (self.btn_range_five_years, 1825)):
+            button.setToolTip("Задать диапазон от даты транзита, затем нажать «Рассчитать»")
+            button.clicked.connect(lambda _=False, span=days: self._apply_range_preset(span))
+            preset_row.addWidget(button)
+        layout.addLayout(preset_row)
+
         
         # --- Results Table ---
         results_group = QGroupBox("Результаты")
@@ -327,48 +345,109 @@ class TransitPanel(QWidget):
             with open(file_path, 'w', encoding='utf-8') as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
                 
+    def _apply_range_preset(self, days: int):
+        """Задаёт диапазон от даты транзита и включает режим диапазона (TRANSIT_UX_V1)."""
+        start = self.edit_transit_date.date()
+        self.radio_date_range.setChecked(True)
+        self.edit_start_date.setDate(start)
+        self.edit_end_date.setDate(start.addDays(days))
+
     @pyqtSlot(list)
     def set_results(self, results: List[Dict]):
-        """Display transit results in table."""
+        """Показывает результат понятными колонками (TRANSIT_UX_V1).
+
+        Режим определяется по составу записи: периоды активности, точные
+        транзиты или календарь по дням. Технические поля (jd, target_longitude)
+        не показываются - они не нужны пользователю.
+        """
+        from astro_core.constants import (
+            ASPECT_NAMES_RU, DIRECTION_NAMES_RU, PLANET_NAMES_RU,
+        )
+
         self.table_results.setRowCount(0)
-        
         if not results:
+            self.table_results.setColumnCount(0)
             return
-            
-        # Determine columns from first result
-        columns = list(results[0].keys())
-        self.table_results.setColumnCount(len(columns))
-        self.table_results.setHorizontalHeaderLabels(columns)
-        
-        # Translate column headers to Russian
-        header_map = {
-            "date": "Дата",
-            "transit_planet": "Транзитная планета",
-            "aspect": "Аспект",
-            "natal_point": "Натальная точка",
-            "orb": "Орб",
-            "strength": "Сила",
-            "exact_datetime": "Точное время",
-            "direction": "Направление",
-            "start_date": "Вход в орб",
-            "exact_date": "Пик",
-            "end_date": "Выход из орба",
-        }
-        
-        for i, col in enumerate(columns):
-            if col in header_map:
-                self.table_results.setHorizontalHeaderItem(i, QTableWidgetItem(header_map[col]))
-                
+
+        sample = results[0]
+        if "start_datetime" in sample:
+            schema = [
+                ("transit_planet", "Планета"),
+                ("natal_point", "Натальная точка"),
+                ("aspect", "Аспект"),
+                ("start_datetime", "Вход в орб"),
+                ("exact_datetime", "Пик"),
+                ("end_datetime", "Выход из орба"),
+                ("_duration", "Длительность, дн"),
+                ("direction", "Направление"),
+                ("orb", "Орб, °"),
+            ]
+        elif "exact_datetime" in sample:
+            schema = [
+                ("exact_datetime", "Точное время"),
+                ("transit_planet", "Планета"),
+                ("natal_point", "Натальная точка"),
+                ("aspect", "Аспект"),
+                ("direction", "Направление"),
+            ]
+        elif "date" in sample:
+            schema = [
+                ("date", "Дата"),
+                ("transit_planet", "Планета"),
+                ("natal_point", "Натальная точка"),
+                ("aspect", "Аспект"),
+                ("orb", "Орб, °"),
+                ("strength", "Сила"),
+            ]
+        else:
+            schema = [(key, key) for key in sample.keys()]
+
+        self.table_results.setColumnCount(len(schema))
+        self.table_results.setHorizontalHeaderLabels([title for _, title in schema])
         self.table_results.setRowCount(len(results))
-        
-        for row, result in enumerate(results):
-            for col, key in enumerate(columns):
-                value = result.get(key, "")
-                if isinstance(value, float):
-                    item = QTableWidgetItem(f"{value:.2f}")
-                else:
-                    item = QTableWidgetItem(str(value))
+
+        for row, record in enumerate(results):
+            for column, (key, _title) in enumerate(schema):
+                text = self._format_cell(key, record, ASPECT_NAMES_RU,
+                                         DIRECTION_NAMES_RU, PLANET_NAMES_RU)
+                item = QTableWidgetItem(text)
                 item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                self.table_results.setItem(row, col, item)
-                
+                self.table_results.setItem(row, column, item)
+
         self.table_results.resizeColumnsToContents()
+
+    @staticmethod
+    def _format_cell(key, record, aspect_ru, direction_ru, planet_ru):
+        """Значение ячейки в виде, понятном астрологу, а не программе."""
+        if key == "_duration":
+            start = record.get("start_jd")
+            end = record.get("end_jd")
+            if isinstance(start, (int, float)) and isinstance(end, (int, float)):
+                return f"{end - start:.1f}"
+            return ""
+
+        value = record.get(key, "")
+        if key in ("transit_planet", "natal_point"):
+            return planet_ru.get(value, str(value))
+        if key == "aspect":
+            return aspect_ru.get(value, str(value))
+        if key == "direction":
+            return direction_ru.get(value, str(value))
+        if key in ("start_datetime", "exact_datetime", "end_datetime"):
+            text = str(value)
+            if "T" in text:
+                date_part, time_part = text.split("T", 1)
+                pieces = date_part.split("-")
+                if len(pieces) == 3:
+                    year, month, day = pieces
+                    return f"{day}.{month}.{year} {time_part[:5]}"
+            return text
+        if key == "date":
+            pieces = str(value).split("-")
+            if len(pieces) == 3:
+                year, month, day = pieces
+                return f"{day}.{month}.{year}"
+            return str(value)
+        if isinstance(value, float):
+            return f"{value:.2f}"
+        return str(value)
