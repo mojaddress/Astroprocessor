@@ -109,12 +109,12 @@ def test_background_dialog_appears_for_long_range(qapp, chart):
         panel.set_natal_data(chart["objects"], chart.get("settings", {}))
         panel.radio_periods.setChecked(True)
         panel.edit_transit_date.setDate(QDate(2026, 1, 1))
-        panel.btn_range_five_years.click()
+        panel.btn_range_year.click()
 
         QTimer.singleShot(600, lambda: _hide_dialogs(window))
         window._handle_calculate_transits(
             "periods", QDate(2026, 1, 1).toPyDate(),
-            QDate(2026, 1, 1).addDays(1825).toPyDate(), [], [])
+            QDate(2026, 1, 1).addDays(365).toPyDate(), [], [])
 
         assert window._background.busy, "длинный расчёт должен уйти в фон"
 
