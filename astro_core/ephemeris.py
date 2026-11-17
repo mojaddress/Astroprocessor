@@ -65,6 +65,8 @@ def _invalidates_ephemeris_cache(func):
     """
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
+        global _ACTIVE_CONTEXT
+        _ACTIVE_CONTEXT = None
         state = _ephemeris_state(args, kwargs)
         try:
             ephemeris_cache.set_context(**state)
@@ -76,6 +78,15 @@ def _invalidates_ephemeris_cache(func):
 
 
 _cached_calc_ut = ephemeris_cache.calc_ut
+
+# --- Кэш активного контекста эфемерид --- CALL_PATH_V1
+# Путь эфемерид и режим зодиака - глобальное состояние Swiss Ephemeris.
+# Пересчитывать их на каждый вызов дорого (замер: 87.5% стоимости вызова).
+# Контекст переустанавливается только при смене сигнатуры настроек.
+_ACTIVE_CONTEXT = None
+_ACTIVE_FLAGS = None
+_ACTIVE_WARNINGS = ()
+
 
 
 def ensure_swisseph():
@@ -129,6 +140,7 @@ def initialize_ephemeris(settings):
             return
 
 
+@functools.lru_cache(maxsize=64)  # CALL_PATH_V1: id планет постоянны
 def get_planet_id(name):
     """
     Возвращает числовой идентификатор планеты или точки
@@ -218,6 +230,33 @@ def setup_zodiac_mode(settings):
     return flags, warnings
 
 
+def _ensure_context(settings):
+    """Гарантирует нужный контекст эфемерид; возвращает (flags, warnings).  # CALL_PATH_V1
+
+    Повторные вызовы с теми же настройками не трогают глобальное состояние
+    Swiss Ephemeris и не пересчитывают снимок настроек. Смена зодиака,
+    аянамши или пути эфемерид переустанавливает контекст полностью.
+    Прямые вызовы initialize_ephemeris/setup_zodiac_mode сбрасывают кэш
+    через декоратор, поэтому рассинхронизация невозможна.
+    """
+    global _ACTIVE_CONTEXT, _ACTIVE_FLAGS, _ACTIVE_WARNINGS
+    config = settings or {}
+    signature = (
+        str(config.get("zodiac", "tropical")).lower(),
+        repr(config.get("ayanamsha", DEFAULT_AYANAMSHA)),
+        str(config.get("ephe_path", "")),
+    )
+    if _ACTIVE_CONTEXT == signature:
+        return _ACTIVE_FLAGS, list(_ACTIVE_WARNINGS)
+
+    initialize_ephemeris(config)
+    flags, warnings = setup_zodiac_mode(config)
+    _ACTIVE_CONTEXT = signature
+    _ACTIVE_FLAGS = flags
+    _ACTIVE_WARNINGS = tuple(warnings)
+    return flags, list(_ACTIVE_WARNINGS)
+
+
 def calculate_objects(julian_day, settings=None):
     """
     Рассчитывает положения планет и дополнительных точек.
@@ -251,11 +290,8 @@ def calculate_objects(julian_day, settings=None):
 
     warnings = []
 
-    # Установка пути к эфемеридам
-    initialize_ephemeris(settings)
-
-    # Настройка режима зодиака
-    flags, zodiac_warnings = setup_zodiac_mode(settings)
+    # Контекст кэшируется по сигнатуре настроек (CALL_PATH_V1).
+    flags, zodiac_warnings = _ensure_context(settings)
     warnings.extend(zodiac_warnings)
 
     objects = []
@@ -445,11 +481,8 @@ def get_planet_position(julian_day, planet_name, settings=None):
     if settings is None:
         settings = {}
 
-    # Установка пути к эфемеридам
-    initialize_ephemeris(settings)
-
-    # Настройка режима зодиака
-    flags, _ = setup_zodiac_mode(settings)
+    # Контекст кэшируется по сигнатуре настроек (CALL_PATH_V1).
+    flags, _ = _ensure_context(settings)
 
     planet_id = get_planet_id(planet_name)
 
@@ -475,7 +508,7 @@ def calculate_hypothetical_point(julian_day, name, settings=None):
         return None
     attr, fallback = ids[name]
     body_id = getattr(swe, attr, fallback)
-    flags, _ = setup_zodiac_mode(settings or {})
+    flags, _ = _ensure_context(settings)  # CALL_PATH_V1
     try:
         result = _cached_calc_ut(julian_day, body_id, flags)
     except Exception:

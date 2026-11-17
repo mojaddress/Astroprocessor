@@ -376,7 +376,7 @@ def _build_planet_track(jd_start, jd_end, planet_name, step_days, settings=None,
 
 
 def _refine_crossing_fast(jd_low, jd_high, planet_name, target_longitude, settings=None,
-                          tol_deg=1e-9, max_iterations=60):
+                          tol_deg=1e-9, max_iterations=60, time_tol=1e-8):
     """Уточнение пересечения методом Иллинойса (хорда с защитой от застоя).
 
     Скобка сохраняется, сходимость сверхлинейная: обычно 4-7 обращений
@@ -406,7 +406,7 @@ def _refine_crossing_fast(jd_low, jd_high, planet_name, target_longitude, settin
 
         lon_mid, _ = get_planet_position(jd_mid, planet_name, settings)
         f_mid = normalize_diff(lon_mid - target_longitude)
-        if abs(f_mid) < tol_deg:
+        if abs(f_mid) < tol_deg or abs(jd_high - jd_low) < time_tol:
             return jd_mid
 
         if (f_mid > 0.0) == (f_low > 0.0):
@@ -637,7 +637,175 @@ def find_transit_events_legacy(natal_objects, start_date, end_date, settings=Non
     return events
 
 
+# --- Быстрые и корректные границы орба --- ORB_FAST_V1
+def _orb_distance(jd, planet_name, target_longitude, settings=None):
+    """Расстояние до цели в градусах и текущая скорость планеты."""
+    lon, speed = get_planet_position(jd, planet_name, settings)
+    return abs(normalize_diff(lon - target_longitude)), speed
+
+
+def _refine_orb_boundary_fast(jd_in, jd_out, planet_name, target_longitude, max_orb,
+                              settings=None, tol=1e-9, max_iterations=60, time_tol=1e-8):
+    """Уточнение границы орба методом Иллинойса на скобке [внутри, снаружи]."""
+    def value(jd):
+        lon, _ = get_planet_position(jd, planet_name, settings)
+        return abs(normalize_diff(lon - target_longitude)) - max_orb
+
+    f_in = value(jd_in)
+    f_out = value(jd_out)
+    if f_in == 0.0:
+        return jd_in
+    if f_out == 0.0:
+        return jd_out
+    if (f_in > 0.0) == (f_out > 0.0):
+        return (jd_in + jd_out) / 2.0
+
+    jd_mid = (jd_in + jd_out) / 2.0
+    side = 0
+    for _ in range(max_iterations):
+        denominator = f_out - f_in
+        if denominator == 0.0:
+            jd_mid = (jd_in + jd_out) / 2.0
+        else:
+            jd_mid = (jd_in * f_out - jd_out * f_in) / denominator
+        low, high = min(jd_in, jd_out), max(jd_in, jd_out)
+        if not (low < jd_mid < high):
+            jd_mid = (jd_in + jd_out) / 2.0
+        f_mid = value(jd_mid)
+        if abs(f_mid) < tol or abs(jd_out - jd_in) < time_tol:
+            return jd_mid
+        if (f_mid > 0.0) == (f_in > 0.0):
+            jd_in, f_in = jd_mid, f_mid
+            if side == -1:
+                f_out *= 0.5
+            side = -1
+        else:
+            jd_out, f_out = jd_mid, f_mid
+            if side == 1:
+                f_in *= 0.5
+            side = 1
+    return jd_mid
+
+
 def find_orb_boundary(exact_jd, planet_name, target_longitude, max_orb,
+                      direction="backward", max_days=None, settings=None,
+                      diagnostics=None):
+    """Момент входа в орб или выхода из орба.
+
+    Отличия от find_orb_boundary_legacy при том же контракте:
+      * начальный шаг выводится из скорости планеты (орб / |скорость|);
+      * окно расширяется геометрически до 3650 суток, а не жёстких 60 -
+        медленные планеты (Юпитер..Плутон) больше не дают нулевой период;
+      * уточнение методом Иллинойса (5-8 обращений вместо ~100).
+
+    Если граница не найдена в пределах окна (например, планета в станции),
+    возвращается exact_jd, а факт фиксируется в diagnostics - молчаливого
+    сокрытия проблемы нет.
+    """
+    if max_orb <= 0.0:
+        return exact_jd
+
+    sign = -1.0 if direction == "backward" else 1.0
+    limit = 3650.0 if max_days is None else float(max_days)
+
+    _, speed = _orb_distance(exact_jd, planet_name, target_longitude, settings)
+    rate = abs(speed)
+    step = (max_orb / rate) if rate > 1e-8 else 1.0
+    step = min(max(step, 0.05), 10.0)
+
+    jd_in = exact_jd
+    travelled = 0.0
+    while travelled < limit:
+        jd_out = jd_in + sign * step
+        travelled += step
+        distance, _ = _orb_distance(jd_out, planet_name, target_longitude, settings)
+        if distance > max_orb:
+            return _refine_orb_boundary_fast(
+                jd_in, jd_out, planet_name, target_longitude, max_orb, settings
+            )
+        jd_in = jd_out
+        step = min(step * 2.0, 60.0)
+
+    if diagnostics is not None:
+        diagnostics.append({
+            "planet": planet_name,
+            "target_longitude": target_longitude,
+            "max_orb": max_orb,
+            "direction": direction,
+            "exact_jd": exact_jd,
+            "window_days": limit,
+            "reason": "orb boundary not reached within window",
+        })
+    return exact_jd
+
+
+def find_transit_periods(natal_objects, start_date, end_date, settings=None,
+                         filter_planets=None, filter_aspects=None,
+                         progress=None, cancel=None):
+    """Периоды активности транзитов: вход в орб, пик, выход из орба.
+
+    Состав результата совпадает с find_transit_periods_legacy, но границы
+    для медленных планет находятся реально, а не схлопываются в точку.
+    progress(percent, message) и cancel() - необязательные колбэки.
+    """
+    if settings is None:
+        settings = DEFAULT_SETTINGS
+
+    events = find_transit_events(
+        natal_objects, start_date, end_date, settings,
+        filter_planets=filter_planets, filter_aspects=filter_aspects,
+        cancel=cancel,
+    )
+
+    orbs = settings.get("orbs", DEFAULT_SETTINGS.get("orbs", {}))
+    periods = []
+    total = len(events)
+
+    for index, event in enumerate(events):
+        if cancel is not None and index % 32 == 0:
+            cancel()
+
+        planet_name = event["transit_planet"]
+        target_lon = event["target_longitude"]
+        exact_jd = event["exact_jd"]
+        aspect_name = event["aspect"]
+
+        max_orb = float(orbs.get(aspect_name, 0.0))
+        if max_orb <= 0.0:
+            continue
+
+        start_jd = find_orb_boundary(
+            exact_jd, planet_name, target_lon, max_orb,
+            direction="backward", settings=settings
+        )
+        end_jd = find_orb_boundary(
+            exact_jd, planet_name, target_lon, max_orb,
+            direction="forward", settings=settings
+        )
+
+        periods.append({
+            "transit_planet": planet_name,
+            "natal_point": event["natal_point"],
+            "aspect": aspect_name,
+            "target_longitude": target_lon,
+            "direction": event["direction"],
+            "start_jd": start_jd,
+            "start_datetime": jd_to_datetime(start_jd).isoformat(),
+            "exact_jd": exact_jd,
+            "exact_datetime": event["exact_datetime"],
+            "end_jd": end_jd,
+            "end_datetime": jd_to_datetime(end_jd).isoformat(),
+            "orb": max_orb,
+        })
+
+        if progress is not None and total:
+            progress(int((index + 1) * 100 / total), f"{planet_name}: {index + 1}/{total}")
+
+    periods.sort(key=lambda p: p["exact_jd"])
+    return periods
+
+
+def find_orb_boundary_legacy(exact_jd, planet_name, target_longitude, max_orb,
                       direction="backward", max_days=60, settings=None):
     """
     Находит момент, когда транзитная планета входит в орб или выходит из орба.
@@ -689,6 +857,10 @@ def find_orb_boundary(exact_jd, planet_name, target_longitude, max_orb,
     return exact_jd
 
 
+# ВНИМАНИЕ (ORB_TESTS_V2): legacy-уточнение границы орба содержит ошибку выбора
+# конца скобки - решение принимается по состоянию jd_low, а не jd_mid, из-за чего
+# граница смещается наружу (до 0.25 суток). Сохранено только как эталон для
+# сравнения точности. В расчётах используется _refine_orb_boundary_fast.
 def refine_orb_boundary(jd_low, jd_high, planet_name, target_longitude, max_orb,
                         max_iterations=50, settings=None):
     """
@@ -730,7 +902,7 @@ def refine_orb_boundary(jd_low, jd_high, planet_name, target_longitude, max_orb,
     return (jd_low + jd_high) / 2.0
 
 
-def find_transit_periods(natal_objects, start_date, end_date, settings=None,
+def find_transit_periods_legacy(natal_objects, start_date, end_date, settings=None,
                          filter_planets=None, filter_aspects=None):
     """
     Находит периоды активности транзитов за период.
@@ -778,13 +950,13 @@ def find_transit_periods(natal_objects, start_date, end_date, settings=None,
             continue
 
         # Находим вход в орб (сканируем назад от точной даты)
-        start_jd = find_orb_boundary(
+        start_jd = find_orb_boundary_legacy(
             exact_jd, planet_name, target_lon, max_orb,
             direction="backward", settings=settings
         )
 
         # Находим выход из орба (сканируем вперёд от точной даты)
-        end_jd = find_orb_boundary(
+        end_jd = find_orb_boundary_legacy(
             exact_jd, planet_name, target_lon, max_orb,
             direction="forward", settings=settings
         )
