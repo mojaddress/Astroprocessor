@@ -293,40 +293,6 @@ class MainWindow(QMainWindow):
         except Exception as e:
             self._status_label.setText(f"Ошибка отображения транзитов: {str(e)}")
 
-    def _extract_transit_planets_for_chart(self, transit_result, start_date, end_date):
-        """Extract transit planets for chart rendering."""
-        # For chart rendering, we need current positions of transit planets
-        # This is a simplified version - in reality you'd calculate exact positions
-        transit_planets = []
-        seen_planets = set()
-        
-        for event in transit_result:
-            planet_name = event.get("transit_planet", "")
-            if planet_name and planet_name not in seen_planets:
-                transit_planets.append({
-                    "name": planet_name,
-                    "longitude": event.get("transit_longitude", 0),
-                    "sign": event.get("transit_sign", ""),
-                    "retrograde": event.get("retrograde", False),
-                    "speed_longitude": event.get("speed", 0)
-                })
-                seen_planets.add(planet_name)
-        
-        return transit_planets
-    
-    def _extract_transit_aspects_for_chart(self, transit_result):
-        """Extract transit aspects for chart rendering."""
-        transit_aspects = []
-        for event in transit_result:
-            transit_aspects.append({
-                "transit_planet": event.get("transit_planet", ""),
-                "natal_point": event.get("natal_point", ""),
-                "aspect": event.get("aspect", ""),
-                "orb": event.get("orb", 0),
-                "angle": event.get("angle", 0)
-            })
-        return transit_aspects
-        
     def _init_menus(self):
         """Initialize the menu bar."""
         menubar = self.menuBar()

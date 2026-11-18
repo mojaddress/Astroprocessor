@@ -545,16 +545,6 @@ class BirthInputPanel(QWidget):
         from PyQt6.QtCore import QTimer
         QTimer.singleShot(0, self._capture_eq_baseline)
 
-    def _eq_naturals(self):
-        """Естественные высоты секций, измеренные БЕЗ ограничений (37g)."""
-        groups = getattr(self, "_eq_groups", None) or []
-        for g in groups:
-            g.setMinimumHeight(0)
-            g.setMaximumHeight(16777215)
-        nat = [g.sizeHint().height() for g in groups]
-        total = self.layout().totalSizeHint().height()
-        return nat, total
-
     def _apply_eq_heights(self):
         """LAYOUT: снимаем фиксированные высоты, размеры считает Qt."""
         for group in (getattr(self, "_eq_groups", None) or []):
