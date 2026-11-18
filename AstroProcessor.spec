@@ -27,7 +27,9 @@ if BUNDLE_EPHE:
 
 # Hidden imports
 hidden_imports = [
-    "pyswisseph",
+    "swisseph",  # PACKAGING_FIX_V1: импортируемый модуль - swisseph,
+    # а имя pip-пакета pyswisseph; прежнее имя не находилось и сборка
+    # молча оставалась без эфемерид.
     "zoneinfo",
     "tzdata",
     "PyQt6",
