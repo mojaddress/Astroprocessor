@@ -104,17 +104,28 @@ def save_profile(profile_data, profiles_dir=None):
     dir_path = get_profiles_dir(profiles_dir)
     dir_path.mkdir(parents=True, exist_ok=True)
 
-    # Добавляем метаданные
+    # Добавляем метаданные (PROFILE_CREATED_AT_FIX_V1).
+    # created_at берётся из существующего файла, если он есть: дата создания
+    # профиля не должна сбрасываться при правке.
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
     profile_to_save = dict(profile_data)
     profile_to_save["updated_at"] = now
 
-    if "created_at" not in profile_to_save:
-        profile_to_save["created_at"] = now
-
-    # Определяем имя файла по имени профиля
     filename = profile_to_filename(profile_data["name"])
     file_path = dir_path / filename
+
+    existing_created_at = None
+    if "created_at" not in profile_to_save and file_path.exists():
+        try:
+            existing = json.loads(file_path.read_text(encoding="utf-8"))
+            existing_created_at = existing.get("created_at")
+        except (OSError, ValueError):
+            existing_created_at = None
+    profile_to_save["created_at"] = (
+        existing_created_at
+        or profile_to_save.get("created_at")
+        or now
+    )
 
     # Сохраняем в JSON с поддержкой кириллицы
     file_path.write_text(

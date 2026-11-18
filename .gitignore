@@ -70,3 +70,5 @@ profiles/*
 
 # Служебные файлы инструментов разработки
 .kilo/
+pytest_log.txt
+diag_*.txt

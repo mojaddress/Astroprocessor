@@ -2,7 +2,7 @@
 ; Compile with: ISCmpl.exe /cc AstroProcessor.iss
 
 #define MyAppName "Astro Processor"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "Astro Processor Project"
 #define MyAppURL "https://github.com/astro-processor"
 #define MyAppExeName "AstroProcessor.exe"
