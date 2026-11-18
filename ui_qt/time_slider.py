@@ -31,53 +31,62 @@ class TimeSlider(QWidget):
         self._apply_window()
 
     def _build_ui(self):
+        """Одна строка управления + строка ползунка (SLIDER_ONE_ROW_V1)."""
         root = QVBoxLayout(self)
-        root.setContentsMargins(4, 2, 4, 2)
-        root.setSpacing(2)
+        root.setContentsMargins(6, 2, 6, 2)
+        root.setSpacing(3)
 
-        row = QHBoxLayout()
+        controls = QHBoxLayout()
+        controls.setSpacing(4)
         self.btn_start = QPushButton("⏮")
         self.btn_prev = QPushButton("◀")
-        self.btn_play = QPushButton("▶ Воспроизвести")
+        self.btn_play = QPushButton("▶ Пуск")
         self.btn_next = QPushButton("▶|")
         self.btn_end = QPushButton("⏭")
-        for button, tip in ((self.btn_start, "В начало окна"),
-                            (self.btn_prev, "Шаг назад"),
-                            (self.btn_play, "Анимация транзитов"),
-                            (self.btn_next, "Шаг вперёд"),
-                            (self.btn_end, "В конец окна")):
+        for button, tip, width in (
+                (self.btn_start, "В начало окна", 26),
+                (self.btn_prev, "Шаг назад", 26),
+                (self.btn_play, "Анимация транзитов", 66),
+                (self.btn_next, "Шаг вперёд", 26),
+                (self.btn_end, "В конец окна", 26)):
             button.setToolTip(tip)
-            row.addWidget(button)
+            button.setFixedWidth(width)
+            button.setFixedHeight(24)
+            controls.addWidget(button)
 
-        row.addWidget(QLabel("Окно:"))
         self.combo_window = QComboBox()
         for title, _days in self.WINDOWS:
             self.combo_window.addItem(title)
         self.combo_window.setCurrentIndex(1)
-        row.addWidget(self.combo_window)
-
-        row.addWidget(QLabel("Шаг:"))
+        self.combo_window.setToolTip("Диапазон окна времени")
         self.combo_step = QComboBox()
         for title, _days in self.STEPS:
             self.combo_step.addItem(title)
-        row.addWidget(self.combo_step)
-
-        row.addWidget(QLabel("Скорость:"))
+        self.combo_step.setToolTip("Шаг перемещения")
         self.combo_speed = QComboBox()
         for title, _ms in self.SPEEDS:
             self.combo_speed.addItem(title)
         self.combo_speed.setCurrentIndex(1)
-        row.addWidget(self.combo_speed)
+        self.combo_speed.setToolTip("Скорость анимации")
+        for combo in (self.combo_window, self.combo_step, self.combo_speed):
+            combo.setSizeAdjustPolicy(
+                QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+            combo.setMinimumContentsLength(4)
+            combo.setFixedHeight(24)
+            controls.addWidget(combo)
 
-        row.addStretch(1)
+        controls.addStretch(1)
         self.lbl_date = QLabel("")
-        self.lbl_date.setMinimumWidth(90)
-        row.addWidget(self.lbl_date)
-        root.addLayout(row)
+        self.lbl_date.setMinimumWidth(66)
+        self.lbl_date.setAlignment(
+            Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        controls.addWidget(self.lbl_date)
+        root.addLayout(controls)
 
         self.slider = QSlider(Qt.Orientation.Horizontal)
         self.slider.setMinimum(0)
         self.slider.setSingleStep(1)
+        self.slider.setFixedHeight(18)
         root.addWidget(self.slider)
 
         self.btn_start.clicked.connect(lambda: self._set_value(0))
@@ -111,7 +120,7 @@ class TimeSlider(QWidget):
 
     def stop(self):
         self._timer.stop()
-        self.btn_play.setText("▶ Воспроизвести")
+        self.btn_play.setText("▶ Пуск")
 
     def toggle_play(self):
         if self.is_playing():
@@ -124,7 +133,7 @@ class TimeSlider(QWidget):
         self.slider.blockSignals(True)
         self.slider.setMaximum(span)
         self.slider.blockSignals(False)
-        self._on_value(self.slider.value())
+        self._refresh_label()  # SLIDER_SILENT_V1
 
     def _apply_speed(self):
         self._timer.setInterval(self.SPEEDS[self.combo_speed.currentIndex()][1])
@@ -137,6 +146,14 @@ class TimeSlider(QWidget):
 
     def _step(self, direction: int):
         self._set_value(self.slider.value() + direction * self._step_days())
+
+    def _refresh_label(self):
+        """Обновляет подпись даты БЕЗ сигнала (SLIDER_SILENT_V1).
+
+        Программная установка точки отсчёта или окна - не действие
+        пользователя, поэтому перерисовку транзитов не запускает.
+        """
+        self.lbl_date.setText(self.current_date().toString("dd.MM.yyyy"))
 
     def _on_value(self, value: int):
         date = self._anchor.addDays(int(value))

@@ -144,6 +144,61 @@ def glyph_part_of_fortune():
     return p, []
 
 
+# --- Астероиды --- ASTEROIDS_V1
+def glyph_ceres():
+    """Церера: серп над крестом."""
+    p = QPainterPath()
+    p.moveTo(50, 46); p.lineTo(50, 90)
+    p.moveTo(36, 74); p.lineTo(64, 74)
+    p.moveTo(50, 46)
+    p.quadTo(50, 22, 32, 22)
+    p.quadTo(16, 22, 16, 36)
+    return p, []
+
+
+def glyph_pallas():
+    """Паллада: наконечник копья (ромб) над крестом."""
+    p = QPainterPath()
+    p.moveTo(50, 12); p.lineTo(67, 34); p.lineTo(50, 56); p.lineTo(33, 34)
+    p.closeSubpath()
+    p.moveTo(50, 56); p.lineTo(50, 90)
+    p.moveTo(36, 74); p.lineTo(64, 74)
+    return p, []
+
+
+def glyph_juno():
+    """Юнона: скипетр со звездой над крестом."""
+    p = QPainterPath()
+    cx, cy, r = 50, 28, 16
+    p.moveTo(cx - r, cy); p.lineTo(cx + r, cy)
+    p.moveTo(cx, cy - r); p.lineTo(cx, cy + r)
+    d = r * 0.7
+    p.moveTo(cx - d, cy - d); p.lineTo(cx + d, cy + d)
+    p.moveTo(cx - d, cy + d); p.lineTo(cx + d, cy - d)
+    p.moveTo(50, 44); p.lineTo(50, 90)
+    p.moveTo(36, 74); p.lineTo(64, 74)
+    return p, []
+
+
+def glyph_vesta():
+    """Веста: пламя очага над крестом."""
+    p = QPainterPath()
+    p.moveTo(32, 16); p.lineTo(50, 44); p.lineTo(68, 16)
+    p.moveTo(38, 30); p.lineTo(62, 30)
+    p.moveTo(50, 44); p.lineTo(50, 90)
+    p.moveTo(36, 74); p.lineTo(64, 74)
+    return p, []
+
+
+def glyph_vertex():
+    """Вертекс: V с малым крестом справа внизу (VXMP)."""
+    p = QPainterPath()
+    p.moveTo(26, 16); p.lineTo(48, 62); p.lineTo(70, 16)
+    p.moveTo(64, 66); p.lineTo(64, 92)
+    p.moveTo(53, 79); p.lineTo(75, 79)
+    return p, []
+
+
 GLYPH_BUILDERS = {
     "Sun": glyph_sun,
     "Moon": glyph_moon,
@@ -160,6 +215,12 @@ GLYPH_BUILDERS = {
     "SouthNode": glyph_south_node,
     "Chiron": glyph_chiron,
     "PartOfFortune": glyph_part_of_fortune,
+    # ASTEROIDS_V1
+    "Ceres": glyph_ceres,
+    "Pallas": glyph_pallas,
+    "Juno": glyph_juno,
+    "Vesta": glyph_vesta,
+    "Vertex": glyph_vertex,  # VXMP
 }
 
 

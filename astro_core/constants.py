@@ -44,6 +44,39 @@ HOUSE_SYSTEM_CODES = {
     "porphyry": "O",
     "regiomontanus": "R",
     "campanus": "C",
+    # HOUSE_SYSTEMS_V1: расширение до паритета с профессиональными программами.
+    # Коды - штатные обозначения систем домов Swiss Ephemeris.
+    "alcabitus": "B",
+    "morinus": "M",
+    "topocentric": "T",
+    "meridian": "X",
+    "equal_mc": "D",
+    "vehlow": "V",
+    "equal_aries": "N",
+    "sripati": "S",
+    "krusinski": "U",
+    "apc": "Y",
+}
+
+# HOUSE_SYSTEMS_V1: подписи для интерфейса (ключ -> русское название).
+HOUSE_SYSTEM_NAMES_RU = {
+    "placidus": "Плацидус",
+    "koch": "Кох",
+    "equal": "Равнодомная от ASC",
+    "whole_sign": "Целые знаки",
+    "porphyry": "Порфирий",
+    "regiomontanus": "Региомонтан",
+    "campanus": "Кампанус",
+    "alcabitus": "Алькабитий",
+    "morinus": "Моринус",
+    "topocentric": "Топоцентрическая (Полих-Пейдж)",
+    "meridian": "Меридианная (осевая)",
+    "equal_mc": "Равнодомная от MC",
+    "vehlow": "Велоу",
+    "equal_aries": "Равнодомная от 0° Овна",
+    "sripati": "Шрипати",
+    "krusinski": "Крусински-Пиза",
+    "apc": "APC",
 }
 
 DEFAULT_SETTINGS = {
@@ -91,6 +124,11 @@ PLANET_NAMES_RU = {
     "TrueNode": "Сев. Узел",
     "SouthNode": "Юж. Узел",
     "Chiron": "Хирон",
+    "Ceres": "Церера",
+    "Pallas": "Паллада",
+    "Juno": "Юнона",
+    "Vesta": "Веста",
+    "Vertex": "Вертекс",  # VXMP
     "ASC": "Асцендент",
     "MC": "Середина Неба",
     "PartOfFortune": "Фортуна",

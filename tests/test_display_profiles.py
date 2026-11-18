@@ -21,8 +21,16 @@ def test_builtin_profiles_valid():
 
 def test_full_profile_has_all_objects():
     full = dp.get_builtin_profile("full")
+    # SLIDER_SILENT_V1 / ASTEROIDS_V1: инвариант уточнён.
+    # "full" включает все объекты, кроме opt-in классов:
+    # астероиды включаются пользователем явно, чтобы не менять
+    # вид существующих карт по умолчанию.
+    opt_in = {"Asteroids", "Vertex"}  # VXMP_OPTIN
     for key in dp.ALL_OBJECT_KEYS:
-        assert full["objects"][key] is True
+        if key in opt_in:
+            assert full["objects"][key] is False
+        else:
+            assert full["objects"][key] is True
 
 
 def test_classic_profile_disables_outers():

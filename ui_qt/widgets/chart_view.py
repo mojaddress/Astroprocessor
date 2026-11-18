@@ -44,6 +44,10 @@ PLANET_COLORS = {
     "Saturn": "#1C1C1C", "Uranus": "#00BFFF", "Neptune": "#008B8B",
     "Pluto": "#8B0000", "MeanNode": "#696969", "TrueNode": "#696969",
     "SouthNode": "#A9A9A9", "Chiron": "#8B4513",
+    # ASTEROIDS_V1
+    "Ceres": "#8D6E63", "Pallas": "#5C6BC0",
+    "Juno": "#C2185B", "Vesta": "#EF6C00",
+    "Vertex": "#00838F",  # VXMP
 }
 ASPECT_COLORS = {
     "conjunction": "#FF4500", "sextile": "#1E90FF", "square": "#DC143C",
@@ -265,6 +269,8 @@ class ChartView(QGraphicsView):
             return bool(s.get("text_nodes", False))
         if name == "PartOfFortune":
             return bool(s.get("text_fortune", False))
+        if name in ("Ceres", "Pallas", "Juno", "Vesta"):  # OBJECT_FLAGS_V1
+            return bool(s.get("text_asteroids", False))
         return bool(s.get("show_planet_labels", False))
 
     def _color(self, name, palette):
@@ -447,14 +453,12 @@ class ChartView(QGraphicsView):
             self._text(cpos.x(), cpos.y(), str(cdeg), 8, "#888888")
 
     def _draw_angles(self, points, r_from, r_to):
-        if not self._settings["show_angle_labels"]:
-            return
-        c = SCENE_SIZE / 2
+        """Рисует углы и возвращает их позиции для линий аспектов (ASTEROIDS_V1)."""
+        positions = {}
+        c = SCENE_SIZE / 2  # OBJECT_FLAGS_V1: углы рисуются всегда
         for pt in points:
             name, lon = pt.get("name"), pt.get("longitude")
             if name not in ("ASC", "MC", "DSC") or lon is None:
-                continue
-            if name == "DSC" and not self._settings.get("show_dsc", True):
                 continue
             color = {"ASC": "#E74C3C", "MC": "#3498DB",
                      "DSC": "#16A085"}.get(name, "#888888")
@@ -463,6 +467,8 @@ class ChartView(QGraphicsView):
             tp = self._lp(lon, r_to + SCENE_SIZE * 0.04, c)
             titem = self._text(tp.x(), tp.y(), name, 16, color)
             titem.setData(0, "angles")
+            positions[name] = self._lp(lon, r_from, c)
+        return positions
 
     def _add_aspect_line(self, p1, p2, aspect, color, width, dash=False,
                          opacity=0.7, tooltip=""):
@@ -514,11 +520,11 @@ class ChartView(QGraphicsView):
         dot_r = max(3, int(round(dot_r * 0.8)))
         """Точки Фортуна и Крест судьбы: точка, глиф, градус, подпись."""
         c = SCENE_SIZE / 2
-        result = None
+        positions = {}
         for pt in additional:
             name = pt.get("name")
             if name not in ("PartOfFortune", "CrossOfFate", "BlackMoon",
-                            "Selena", "Proserpina"):
+                            "Selena", "Proserpina", "Vertex"):  # VXMP
                 continue
             lon = pt.get("longitude")
             if lon is None:
@@ -526,7 +532,7 @@ class ChartView(QGraphicsView):
             pos = self._lp(lon, radius, c)
             _point_colors = {"PartOfFortune": "#B8860B", "CrossOfFate": "#8E44AD",
                              "BlackMoon": "#1a1a1a", "Selena": "#90A4AE",
-                             "Proserpina": "#00695C"}
+                             "Proserpina": "#00695C", "Vertex": "#00838F"}
             color = chart_theme.adapt(QColor(_point_colors.get(name, "#666666")))
             tip = self._format_tooltip(pt)
             dot = self._scene.addEllipse(QRectF(pos.x() - dot_r, pos.y() - dot_r,
@@ -575,6 +581,9 @@ class ChartView(QGraphicsView):
                 d = arm * 0.6
                 self._scene.addLine(lp.x() - d, lp.y() - d, lp.x() + d, lp.y() + d, pen)
                 self._scene.addLine(lp.x() - d, lp.y() + d, lp.x() + d, lp.y() - d, pen)
+            elif name == "Vertex":  # VXMP
+                self._glyph("Vertex", lp.x(), lp.y(), glyph_box * 1.4,
+                            color.name(), tooltip=tip)
             else:
                 pen = self._pen(color.name(), GLYPH_STROKE)
                 r = glyph_box * 0.16
@@ -592,13 +601,13 @@ class ChartView(QGraphicsView):
                 "BlackMoon": (self._settings.get("text_blackmoon", False), "Лилит"),
                 "Selena": (self._settings.get("text_selena", False), "Селена"),
                 "Proserpina": (self._settings.get("text_proserpina", False), "Прозерпина"),
+                "Vertex": (self._settings.get("text_vertex", False), "Вертекс"),
             }
             label_on, label = _label_cfg.get(name, (False, name))
             if label_on:
                 self._text(lp.x(), lp.y() + glyph_box, label, 10, color.name())
-            if result is None:
-                result = pos
-        return result
+            positions[name] = pos
+        return positions
 
     def _draw_legend(self):
         if not self._settings.get("show_legend", True):
@@ -628,12 +637,12 @@ class ChartView(QGraphicsView):
         positions = self._place_planets(self._chart_data.get("planets", []),
                                         s * R_ASPECTS, self._settings["planet_dot_size"],
                                         30, s * 0.028)
-        self._draw_angles(self._chart_data.get("additional_points", []),
-                          s * R_HOUSES, s * R_OUTER)
-        pof = self._draw_point_of_fortune(self._chart_data.get("additional_points", []),
-                                          s * R_ASPECTS, self._settings["planet_dot_size"], 26)
-        if pof is not None:
-            positions["PartOfFortune"] = pof
+        # ASTEROIDS_V1: углы и точки участвуют в линиях аспектов
+        positions.update(self._draw_angles(
+            self._chart_data.get("additional_points", []), s * R_HOUSES, s * R_OUTER))
+        positions.update(self._draw_point_of_fortune(
+            self._chart_data.get("additional_points", []),
+            s * R_ASPECTS, self._settings["planet_dot_size"], 26))
         self._draw_aspects(self._chart_data.get("aspects", []), positions)
         self._draw_legend()
 
@@ -657,9 +666,11 @@ class ChartView(QGraphicsView):
         nat_pos = self._place_planets(self._chart_data.get("planets", []), r_asp, 5, 24,
                                       s * 0.02)
         tr_pos = self._place_planets(self._transit_planets, r_tr, 5, 24, s * 0.02)
-        pof = self._draw_point_of_fortune(self._chart_data.get("additional_points", []), r_asp, 5, 22)
-        if pof is not None:
-            nat_pos["PartOfFortune"] = pof
+        # ASTEROIDS_V1: углы и точки участвуют в линиях аспектов
+        nat_pos.update(self._draw_point_of_fortune(
+            self._chart_data.get("additional_points", []), r_asp, 5, 22))
+        nat_pos.update(self._draw_angles(
+            self._chart_data.get("additional_points", []), r_nat, s * R_OUTER))
         for a in self._transit_aspects:
             tp, np_ = a.get("transit_planet"), a.get("natal_point")
             if tp in tr_pos and np_ in nat_pos:
@@ -667,7 +678,6 @@ class ChartView(QGraphicsView):
                                       self._color(a.get("aspect", ""), "aspect_colors"),
                                       1.0, True, 0.8,
                                       aspect_tooltip(a.get("aspect", ""), tp, np_))
-        self._draw_angles(self._chart_data.get("additional_points", []), r_nat, s * R_OUTER)
         self._draw_legend()
 
     def _build_synastry(self):

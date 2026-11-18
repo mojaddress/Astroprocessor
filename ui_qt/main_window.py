@@ -133,7 +133,14 @@ class MainWindow(QMainWindow):
         birth_scroll = QScrollArea()
         birth_scroll.setWidgetResizable(True)
         birth_scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        # LAYOUT: горизонтальная обрезка недопустима
+        # PANEL_MIN_V1: контент нельзя прятать без доступа.
+        # Если минимальная ширина панели не влезает, появляется прокрутка,
+        # а не молчаливая обрезка.
+        birth_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        birth_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         birth_scroll.setWidget(self._birth_input_panel)
+        self._birth_scroll = birth_scroll
         left_layout.addWidget(birth_scroll, 5)
         
         # Load display profiles into birth input panel
@@ -143,6 +150,8 @@ class MainWindow(QMainWindow):
         self._profile_manager = ProfileManager(self._profile_controller)
         self._profile_manager.setMaximumHeight(112)
         left_layout.addWidget(self._profile_manager, 0)
+        self._relax_left_minimums()  # LAYOUT
+        self._compact_profile_list()  # PANEL_LAYOUT_V2
         
         # CENTER PANE - Chart View (main focus)
         self._chart_view = ChartView()
@@ -191,6 +200,21 @@ class MainWindow(QMainWindow):
         self._solar_panel = SolarReturnPanel(
             lambda: self._current_chart_result, self._city_controller)
         self._calc_tabs.addTab(self._solar_panel, "☀️ Обращения")
+        # VXMP: анализ средних точек и планетарных картин
+        from ui_qt.widgets.midpoints_panel import MidpointsPanel
+        self._midpoints_panel = MidpointsPanel(lambda: self._current_chart_result)
+        self._calc_tabs.addTab(self._midpoints_panel, "🔗 Средние точки")
+        # TAB_STRIP_V1: двухрядная полоса вкладок правой панели;
+        # стрелки прокручивают обе строки, т.к. прокрутка одна.
+        from ui_qt.widgets.tab_strip import TabStrip
+        self._tab_strip = TabStrip()
+        self._calc_tabs.tabBar().setVisible(False)
+        right_layout.insertWidget(0, self._tab_strip)
+        QTimer.singleShot(0, self._populate_tab_strip)
+        # DAY_TAB_V1: суточные циклы - планетарные часы и лунные сутки
+        from ui_qt.widgets.day_panel import DayPanel
+        self._day_panel = DayPanel(lambda: self._current_birth_data)
+        self._calc_tabs.addTab(self._day_panel, "🌙 День и часы")
         
         right_layout.addWidget(self._calc_tabs)
         
@@ -199,7 +223,17 @@ class MainWindow(QMainWindow):
         self._main_splitter.addWidget(center_panel)  # TIME_SLIDER_V1
         self._main_splitter.addWidget(right_panel)
         
-        # Set splitter sizes: Left 25%, Center 50%, Right 25%
+        # PANEL_LAYOUT_V2: минимумы и запрет схлопывания крайних секций.
+        # Без них минимумы TimeSlider и вкладок squeezed левую панель.
+        left_panel.setMinimumWidth(260)
+        center_panel.setMinimumWidth(440)  # SLIDER_ONE_ROW_V1
+        right_panel.setMinimumWidth(300)
+        self._main_splitter.setCollapsible(0, False)
+        self._main_splitter.setCollapsible(2, False)
+        self._main_splitter.setStretchFactor(0, 0)
+        self._main_splitter.setStretchFactor(1, 1)
+        self._main_splitter.setStretchFactor(2, 0)
+        self._splitter_initialized = False
         self._main_splitter.setSizes([350, 700, 350])
         
         # Transit state
@@ -420,6 +454,10 @@ class MainWindow(QMainWindow):
         act_ephe = QAction("Путь к эфемеридам…", self)
         act_ephe.triggered.connect(self._on_settings_ephemeris)
         settings_menu.addAction(act_ephe)
+        act_ephe_files = QAction("Файлы эфемерид…", self)  # EPHE_GUI_V1
+        act_ephe_files.triggered.connect(
+            lambda _=False: self._on_ephemeris_files(True))
+        settings_menu.addAction(act_ephe_files)
         act_profile = QAction("Профиль отображения по умолчанию…", self)
         act_profile.triggered.connect(self._on_settings_profile)
         settings_menu.addAction(act_profile)
@@ -552,6 +590,7 @@ class MainWindow(QMainWindow):
         # Chart view signals
         self._chart_view.chart_clicked.connect(self._on_chart_clicked)
         QTimer.singleShot(0, self._apply_user_settings)
+        QTimer.singleShot(0, self._maybe_prompt_ephemeris)  # EPHE_GUI_V1
         self._chart_view.kb_topic.connect(self._open_knowledge)
         self._directions_panel.help_requested.connect(self._open_knowledge)
         self._transits_panel.help_requested.connect(self._open_knowledge)
@@ -633,8 +672,10 @@ class MainWindow(QMainWindow):
             "show_planet_labels": p.chk_show_planet_labels.isChecked(),
             "show_sign_names": p.chk_zodiac.isChecked(),
             "start_dsc": p.chk_start_dsc.isChecked(),
-            "show_angle_labels": p.chk_angles.isChecked(),
-            "show_dsc": p.chk_dsc.isChecked(),
+            "show_angle_labels": True,  # OBJECT_FLAGS_V1
+            "show_dsc": True,
+            "text_asteroids": p.chk_asteroids.isChecked(),
+            "text_vertex": p.chk_vertex.isChecked(),  # VXMP
             "text_chiron": p.chk_chiron.isChecked(),
             "text_nodes": p.chk_nodes.isChecked(),
             "text_fortune": p.chk_fortune.isChecked(),
@@ -908,8 +949,13 @@ class MainWindow(QMainWindow):
             natal_objects = result.get("objects", [])
             chart_settings = result.get("settings", {})
             self._transit_panel.set_natal_data(natal_objects, chart_settings)
+            if self._midpoints_panel.table.rowCount() > 0:  # VXMP
+                self._midpoints_panel._on_calculate()
             self._time_slider.set_anchor(  # TIME_SLIDER_V1
                 self._transit_panel.edit_transit_date.date())
+            # SLIDER_SILENT_V1: расчёт натала не должен переключать вид
+            self._slider_timer.stop()
+            self._slider_pending = None
             
             self._hide_progress()
             self._status_label.setText(f"Карта рассчитана: {birth_data.get('name', 'Chart')}")
@@ -1095,6 +1141,26 @@ class MainWindow(QMainWindow):
             self._time_slider.stop()
             self._status_label.setText(f"Ошибка обновления транзитов: {exc}")
 
+    def _populate_tab_strip(self):
+        """TAB_STRIP_V1: наполняет полосу вкладками после их создания."""
+        for index in range(self._calc_tabs.count()):
+            self._tab_strip.add_tab(self._calc_tabs.tabText(index))
+        self._tab_strip.tab_chosen.connect(self._on_strip_tab)
+        self._calc_tabs.currentChanged.connect(self._on_tabs_current_changed)
+        current = self._calc_tabs.currentIndex()
+        if current >= 0:
+            self._tab_strip.select(self._calc_tabs.tabText(current))
+
+    def _on_strip_tab(self, title):
+        for index in range(self._calc_tabs.count()):
+            if self._calc_tabs.tabText(index) == title:
+                self._calc_tabs.setCurrentIndex(index)
+                return
+
+    def _on_tabs_current_changed(self, index):
+        if index >= 0:
+            self._tab_strip.select(self._calc_tabs.tabText(index))
+
     def _on_show_interpretation(self):
         """Переключает на вкладку Разбор."""
         self._calc_tabs.setCurrentWidget(self._interpretation_panel)
@@ -1210,6 +1276,36 @@ class MainWindow(QMainWindow):
             if w is not None and hasattr(w, "setCurrentText"):
                 w.setCurrentText(city)
 
+    def _on_ephemeris_files(self, modal=True):
+        """EPHE_GUI_V1: диалог управления файлами эфемерид."""
+        from ui_qt.dialogs.ephemeris_dialog import EphemerisDialog
+        dialog = EphemerisDialog(busy_check=lambda: self._background.busy,
+                                 parent=self)
+        dialog.finished.connect(
+            lambda: self._refresh_after_ephe() if dialog.changed else None)
+        self._ephe_dialog = dialog
+        if modal:
+            dialog.exec()
+        else:
+            dialog.show()
+
+    def _refresh_after_ephe(self):
+        if self._current_chart_result:
+            self._on_recalculate_chart()
+
+    def _maybe_prompt_ephemeris(self):
+        """EPHE_GUI_V1: при неполных файлах один раз открывает диалог."""
+        if getattr(self, "_ephe_prompted", False):
+            return
+        self._ephe_prompted = True
+        try:
+            from astro_core import ephe_manager as em
+            complete = em.summary()["complete"]
+        except Exception:
+            return
+        if not complete:
+            self._on_ephemeris_files(modal=False)
+
     def _on_settings_ephemeris(self):
         from astro_core.user_settings import load_user_settings, save_user_settings
         cfg = load_user_settings()
@@ -1265,39 +1361,92 @@ class MainWindow(QMainWindow):
     def _recapture_after_settle(self):
         """37j: более не используется."""
         return
+    def _apply_splitter_sizes(self):
+        """PANEL_LAYOUT_V2: стартовые пропорции 25/50/25 после появления геометрии.
+
+        Вызывается однократно: дальше размерами управляет пользователь.
+        """
+        if getattr(self, "_splitter_initialized", False):
+            return
+        splitter = getattr(self, "_main_splitter", None)
+        if splitter is None:
+            return
+        total = splitter.width()
+        if total < 800:
+            return
+        left = max(260, int(total * 0.25))
+        right = max(300, int(total * 0.25))
+        center = max(440, total - left - right)
+        splitter.setSizes([left, center, right])
+        self._splitter_initialized = True
+
+    def _compact_profile_list(self):
+        """PANEL_LAYOUT_V2: список профилей показывает ~4 строки и прокрутку."""
+        from PyQt6.QtWidgets import QAbstractItemView, QSizePolicy
+        manager = getattr(self, "_profile_manager", None)
+        if manager is None:
+            return
+        for view in manager.findChildren(QAbstractItemView):
+            row = 0
+            hint = getattr(view, "sizeHintForRow", None)
+            if callable(hint):
+                try:
+                    row = int(hint(0))
+                except Exception:
+                    row = 0  # Qt API отличается у разных видов списков
+            if row <= 0:
+                row = view.fontMetrics().height() + 6
+            view.setFixedHeight(4 * row + 2 * view.frameWidth() + 4)
+            view.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+            view.setSizePolicy(QSizePolicy.Policy.Preferred,
+                               QSizePolicy.Policy.Fixed)
+        manager.setSizePolicy(QSizePolicy.Policy.Preferred,
+                              QSizePolicy.Policy.Maximum)
+
+    def _relax_left_minimums(self):
+        """LAYOUT: элементы левой панели сжимаются, а не обрезаются.
+
+        Ряд кнопок и комбо с длинным minimumContentsLength задавали
+        минимальную ширину больше вьюпорта, из-за чего панель обрезалась.
+        """
+        from PyQt6.QtWidgets import (QAbstractSpinBox, QComboBox, QLineEdit,
+                                     QPushButton, QToolButton, QWidget)
+        targets = []
+        for root in (self._birth_input_panel, self._profile_manager):
+            targets.append(root)
+            targets.extend(root.findChildren(QWidget))
+        for widget in targets:
+            if isinstance(widget, (QPushButton, QToolButton, QComboBox)):
+                widget.setMinimumWidth(0)
+                widget.setSizePolicy(QSizePolicy.Policy.Ignored,
+                                     QSizePolicy.Policy.Fixed)
+                if isinstance(widget, QComboBox):
+                    widget.setMinimumContentsLength(4)
+            elif isinstance(widget, (QLineEdit, QAbstractSpinBox)):
+                widget.setMinimumWidth(0)
+                widget.setMaximumWidth(16777215)
+                widget.setSizePolicy(QSizePolicy.Policy.Ignored,
+                                     QSizePolicy.Policy.Fixed)
+        self._birth_input_panel.setMinimumWidth(0)
+        self._profile_manager.setMinimumWidth(0)
+
     def _apply_left_layout(self):
-        """37j: единый центр расчёта высот левой колонки (6 блоков)."""
-        pm = getattr(self, "_profile_manager", None)
+        """LAYOUT: высоты секций считает Qt; ручная арифметика удалена.
+
+        Прежняя логика фиксировала высоты по замеру при первом показе.
+        При уменьшении окна сумма фиксированных высот превышала доступную
+        область, и панель обрезалась. Теперь ограничения снимаются.
+        """
         bip = getattr(self, "_birth_input_panel", None)
-        if pm is None or bip is None:
-            return
-        groups = getattr(bip, "_eq_groups", None)
-        if not groups:
-            return
-        container = pm.parentWidget()
-        lay = container.layout() if container is not None else None
-        if lay is None:
-            return
-        MAXH = 16777215
-        for g in groups:
-            g.setMinimumHeight(0)
-            g.setMaximumHeight(MAXH)
-        pm.setMinimumHeight(0)
-        pm.setMaximumHeight(MAXH)
-        nat_g = [g.sizeHint().height() for g in groups]
-        bip_total = bip.layout().totalSizeHint().height()
-        nat_pm = (pm.compact_height() if hasattr(pm, "compact_height")
-                  else pm.sizeHint().height())
-        natural_total = bip_total + 6 + nat_pm + lay.spacing()
-        raw = container.height() - natural_total
-        base = getattr(self, "_pm_initial_extra", None)
-        if base is None:
-            base = self._pm_initial_extra = max(0, raw)
-        delta = max(0, raw - base)
-        share = delta // 6
-        for g, h in zip(groups, nat_g):
-            g.setFixedHeight(h + share)
-        pm.setFixedHeight(nat_pm + share)
+        pm = getattr(self, "_profile_manager", None)
+        for group in (getattr(bip, "_eq_groups", None) or []):
+            group.setMinimumHeight(0)
+            group.setMaximumHeight(16777215)
+        if pm is not None:
+            pm.setMinimumHeight(0)
+            pm.setMaximumHeight(16777215)
+        self._compact_profile_list()  # PANEL_LAYOUT_V2
+        self._apply_splitter_sizes()  # PANEL_LAYOUT_V2
 
     def resizeEvent(self, event):
         """Только делегирование единому центру расчёта (37j)."""

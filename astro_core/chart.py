@@ -175,6 +175,12 @@ def build_natal_chart(birth, settings=None):
 
         settings = merged_settings
 
+    # OVERRIDES_APPLY_V1: явные переключатели интерфейса важнее профиля отображения.
+    # Ключ object_overrides не затрагивается apply_profile_to_settings,
+    # поэтому приоритет работает при любом порядке слияния настроек.
+    for _key, _value in (settings.get("object_overrides") or {}).items():
+        settings[_key] = bool(_value)
+
     required_fields = [
         "name",
         "date",
@@ -261,70 +267,86 @@ def build_natal_chart(birth, settings=None):
             all_objects.append(angle_object)
             additional_points.append(angle_object)
 
+    # OBJECT_FLAGS_V1: точки считаются независимо от Фортуны.
+    sun = next((p for p in objects if p["name"] == "Sun"), None)
+    moon = next((p for p in objects if p["name"] == "Moon"), None)
+
     if settings.get("include_part_of_fortune", True):
         if asc_longitude is None:
             warnings.append("Part of Fortune skipped: ASC was not calculated.")
+        elif sun is None or moon is None:
+            warnings.append("Part of Fortune skipped: Sun or Moon not found.")
         else:
-            sun = next((p for p in objects if p["name"] == "Sun"), None)
-            moon = next((p for p in objects if p["name"] == "Moon"), None)
+            day_chart = is_day_chart(sun["longitude"], asc_longitude)
+            pof_longitude = part_of_fortune(
+                asc_longitude, sun["longitude"], moon["longitude"], day_chart)
+            sign, degree_in_sign = sign_from_longitude(pof_longitude)
+            pof_object = {
+                "name": "PartOfFortune",
+                "longitude": round(pof_longitude, 6),
+                "sign": sign,
+                "degree_in_sign": round(degree_in_sign, 6),
+                "house": house_for_longitude(cusp_longitudes, pof_longitude),
+                "type": "point",
+                "day_chart": day_chart,
+            }
+            all_objects.append(pof_object)
+            additional_points.append(pof_object)
 
-            if sun is None or moon is None:
-                warnings.append("Part of Fortune skipped: Sun or Moon not found.")
-            else:
-                day_chart = is_day_chart(sun["longitude"], asc_longitude)
-                pof_longitude = part_of_fortune(
-                    asc_longitude,
-                    sun["longitude"],
-                    moon["longitude"],
-                    day_chart,
-                )
+    if settings.get("include_cross_of_fate", True):
+        if sun is None or moon is None:
+            warnings.append("Cross of Fate skipped: Sun or Moon not found.")
+        else:
+            cross_longitude = cross_of_fate(sun["longitude"], moon["longitude"])
+            c_sign, c_degree = sign_from_longitude(cross_longitude)
+            cross_object = {
+                "name": "CrossOfFate",
+                "longitude": round(cross_longitude, 6),
+                "sign": c_sign,
+                "degree_in_sign": round(c_degree, 6),
+                "house": house_for_longitude(cusp_longitudes, cross_longitude),
+                "type": "point",
+            }
+            all_objects.append(cross_object)
+            additional_points.append(cross_object)
 
-                sign, degree_in_sign = sign_from_longitude(pof_longitude)
+    from .ephemeris import calculate_hypothetical_point
+    for _pn, _ik in (("BlackMoon", "include_black_moon"),
+                     ("Selena", "include_selena"),
+                     ("Proserpina", "include_proserpina")):
+        if not settings.get(_ik, True):
+            continue
+        try:
+            _hp = calculate_hypothetical_point(julian_day, _pn, settings)
+        except Exception as e:
+            warnings.append(f"Не удалось рассчитать {_pn}: {e}")
+            continue
+        if _hp is None:
+            warnings.append(f"{_pn}: нужен файл эфемерид seorbel.txt в папке ephe")
+            continue
+        _hp["house"] = house_for_longitude(cusp_longitudes, _hp["longitude"])
+        all_objects.append(_hp)
+        additional_points.append(_hp)
 
-                pof_object = {
-                    "name": "PartOfFortune",
-                    "longitude": round(pof_longitude, 6),
-                    "sign": sign,
-                    "degree_in_sign": round(degree_in_sign, 6),
-                    "house": house_for_longitude(cusp_longitudes, pof_longitude),
-                    "type": "point",
-                    "day_chart": day_chart,
-                }
-
-                all_objects.append(pof_object)
-                additional_points.append(pof_object)
-                if settings.get("include_cross_of_fate", True):
-                    cross_longitude = cross_of_fate(sun["longitude"], moon["longitude"])
-                    c_sign, c_degree = sign_from_longitude(cross_longitude)
-                    cross_object = {
-                        "name": "CrossOfFate",
-                        "longitude": round(cross_longitude, 6),
-                        "sign": c_sign,
-                        "degree_in_sign": round(c_degree, 6),
-                        "house": house_for_longitude(cusp_longitudes, cross_longitude),
-                        "type": "point",
-                    }
-                    all_objects.append(cross_object)
-                    additional_points.append(cross_object)
-
-            from .ephemeris import calculate_hypothetical_point
-            for _pn, _ik in (("BlackMoon", "include_black_moon"),
-                             ("Selena", "include_selena"),
-                             ("Proserpina", "include_proserpina")):
-                if not settings.get(_ik, True):
-                    continue
-                try:
-                    _hp = calculate_hypothetical_point(julian_day, _pn, settings)
-                except Exception as e:
-                    warnings.append(f"Не удалось рассчитать {_pn}: {e}")
-                    continue
-                if _hp is None:
-                    warnings.append(f"{_pn}: нужен файл эфемерид seorbel.elc в папке ephe")
-                    continue
-                _hp["house"] = house_for_longitude(cusp_longitudes, _hp["longitude"])
-                all_objects.append(_hp)
-                additional_points.append(_hp)
-
+    # VXMP: Вертекс - независимая точка, по умолчанию выключена
+    if settings.get("include_vertex", False) and asc_longitude is not None:
+        try:
+            from .ephemeris import calculate_vertex
+            vertex_longitude = calculate_vertex(
+                julian_day, birth["latitude"], birth["longitude"], settings)
+            v_sign, v_degree = sign_from_longitude(vertex_longitude)
+            vertex_object = {
+                "name": "Vertex",
+                "longitude": round(vertex_longitude, 6),
+                "sign": v_sign,
+                "degree_in_sign": round(v_degree, 6),
+                "house": house_for_longitude(cusp_longitudes, vertex_longitude),
+                "type": "point",
+            }
+            all_objects.append(vertex_object)
+            additional_points.append(vertex_object)
+        except Exception as error:
+            warnings.append(f"Vertex skipped: {error}")
 
     aspects = []
 

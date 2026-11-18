@@ -33,7 +33,8 @@ ALL_PLANETS = [
 
 # Специальные ключи объектов (не индивидуальные планеты)
 SPECIAL_OBJECTS = ["Chiron", "LunarNodes", "PartOfFortune", "CrossOfFate",
-                   "BlackMoon", "Selena", "Proserpina", "Angles"]
+                   "BlackMoon", "Selena", "Proserpina", "Angles",
+                   "Asteroids", "Vertex"]  # ASTEROIDS_V1 / VXMP
 
 # Все ключи объектов, доступные в профиле
 ALL_OBJECT_KEYS = ALL_PLANETS + SPECIAL_OBJECTS
@@ -65,8 +66,11 @@ VALID_LABEL_MODES = ["symbols", "words", "both"]
 # ============================================================
 
 def _all_objects_enabled():
-    """Все объекты включены."""
-    return {key: True for key in ALL_OBJECT_KEYS}
+    """Все объекты включены; астероиды - по умолчанию выключены (ASTEROIDS_V1)."""
+    enabled = {key: True for key in ALL_OBJECT_KEYS}
+    enabled["Asteroids"] = False
+    enabled["Vertex"] = False  # VXMP: opt-in
+    return enabled
 
 
 def _all_aspects_enabled():
@@ -322,6 +326,8 @@ def apply_profile_to_settings(profile, base_settings=None):
     settings["include_black_moon"] = bool(objects.get("BlackMoon", True))
     settings["include_selena"] = bool(objects.get("Selena", True))
     settings["include_proserpina"] = bool(objects.get("Proserpina", True))
+    settings["include_asteroids"] = bool(objects.get("Asteroids", False))  # ASTEROIDS_V1
+    settings["include_vertex"] = bool(objects.get("Vertex", False))  # VXMP
 
     # Итерация 35: classic и minimal — без Фортуны и Креста (перезапись после objects)
     pname = profile if isinstance(profile, str) else (profile.get("name", "") if isinstance(profile, dict) else "")

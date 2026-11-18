@@ -38,6 +38,9 @@ PLANET_NAMES = [
     "Pluto",
 ]
 
+# ASTEROIDS_V1: основные астероиды (файл эфемерид seas_18.se1).
+ASTEROID_NAMES = ["Ceres", "Pallas", "Juno", "Vesta"]
+
 
 # --- Интеграция кэша эфемерид --- CACHE_INTEGRATION_V1
 def _ephemeris_state(args, kwargs):
@@ -160,6 +163,11 @@ def get_planet_id(name):
         "MeanNode": getattr(swe, "MEAN_NODE", 10),
         "TrueNode": getattr(swe, "TRUE_NODE", 11),
         "Chiron": getattr(swe, "CHIRON", 15),
+        # ASTEROIDS_V1
+        "Ceres": getattr(swe, "CERES", 17),
+        "Pallas": getattr(swe, "PALLAS", 18),
+        "Juno": getattr(swe, "JUNO", 19),
+        "Vesta": getattr(swe, "VESTA", 20),
     }
 
     if name not in mapping:
@@ -398,6 +406,30 @@ def calculate_objects(julian_day, settings=None):
         except Exception as e:
             warnings.append(f"Не удалось рассчитать Хирон: {e}")
 
+    # --- Астероиды --- ASTEROIDS_V1
+    if settings.get("include_asteroids", False):
+        for asteroid_name in ASTEROID_NAMES:
+            try:
+                asteroid_id = get_planet_id(asteroid_name)
+                result = _cached_calc_ut(julian_day, asteroid_id, flags)
+                coords = result[0]
+                longitude = normalize_longitude(float(coords[0]))
+                speed_longitude = float(coords[3]) if len(coords) > 3 else 0.0
+                sign, degree_in_sign = sign_from_longitude(longitude)
+                objects.append({
+                    "name": asteroid_name,
+                    "type": "asteroid",
+                    "longitude": round(longitude, 6),
+                    "sign": sign,
+                    "degree_in_sign": round(degree_in_sign, 6),
+                    "speed_longitude": round(speed_longitude, 6),
+                    "retrograde": speed_longitude < 0,
+                })
+            except Exception as exc:
+                warnings.append(
+                    f"{asteroid_name}: недоступен ({exc}). "
+                    f"Нужен файл эфемерид seas_18.se1 - см. менеджер эфемерид.")
+
     return objects, warnings
 
 
@@ -493,6 +525,30 @@ def get_planet_position(julian_day, planet_name, settings=None):
     speed_longitude = float(coords[3]) if len(coords) > 3 else 0.0
 
     return longitude, speed_longitude
+
+
+def calculate_vertex(julian_day, latitude, longitude, settings):
+    """Вертекс - точка западного горизонта в прима-вертикали (VXMP).
+
+    Swiss Ephemeris возвращает её в ascmc[3]. Отдельная функция сохраняет
+    контракт calculate_houses (он возвращает только дома, ASC и MC).
+    """
+    ensure_swisseph()
+    house_system = (settings or {}).get("house_system", "placidus").lower()
+    house_code = HOUSE_SYSTEM_CODES.get(house_system, "P")
+    try:
+        try:
+            _cusps, ascmc = swe.houses(
+                julian_day, float(latitude), float(longitude),
+                house_code.encode("ascii"))
+        except TypeError:
+            _cusps, ascmc = swe.houses(
+                julian_day, float(latitude), float(longitude), house_code)
+    except Exception as error:
+        raise RuntimeError(f"Vertex calculation failed: {error}") from error
+    if len(ascmc) < 4:
+        raise RuntimeError("Vertex calculation failed: ascmc too short")
+    return normalize_longitude(float(ascmc[3]))
 
 
 def calculate_hypothetical_point(julian_day, name, settings=None):

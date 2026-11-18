@@ -63,7 +63,7 @@ def test_play_pause_toggles(slider):
     assert "Пауза" in slider.btn_play.text()
     slider.btn_play.click()
     assert not slider.is_playing()
-    assert "Воспроизвести" in slider.btn_play.text()
+    assert "Пуск" in slider.btn_play.text()
 
 
 def test_tick_advances_and_stops_at_end(slider):

@@ -148,7 +148,7 @@ class BirthInputPanel(QWidget):
         
         # Manual coordinates (collapsible)
         self.manual_coords_header = QToolButton()
-        self.manual_coords_header.setText("▶ Ручные координаты")
+        self.manual_coords_header.setText("▶ Координаты")
         self.manual_coords_header.setCheckable(True)
         self.manual_coords_header.setChecked(False)
         self.manual_coords_header.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
@@ -193,7 +193,7 @@ class BirthInputPanel(QWidget):
         manual_layout.addRow("UTC (ч):", self.spin_utc_offset)
         
         manual_widget.setVisible(False)
-        self.btn_save_profile = QPushButton("💾 Сохранить профиль")
+        self.btn_save_profile = QPushButton("💾 В профиль")
         self.btn_save_profile.setFixedHeight(26)
         self.manual_coords_header.setFixedHeight(26)
         manual_row = QGridLayout()
@@ -254,11 +254,11 @@ class BirthInputPanel(QWidget):
         label_layout.addWidget(self.chk_zodiac, 0, 1)
         self.chk_start_dsc = QCheckBox("Начало карты DSC")
         self.chk_start_dsc.setChecked(False)
-        label_layout.addWidget(self.chk_start_dsc, 0, 2)
+        label_layout.addWidget(self.chk_start_dsc, 1, 0, 1, 2)  # COMPACT_LAYOUT_V1
         self.lbl_zodiac_periods = QLabel("")
         self.lbl_zodiac_periods.setWordWrap(True)
         self.lbl_zodiac_periods.setVisible(False)
-        label_layout.addWidget(self.lbl_zodiac_periods, 1, 0, 1, 2)
+        label_layout.addWidget(self.lbl_zodiac_periods, 2, 0, 1, 2)
         
         display_layout.addWidget(label_group, 1)
         
@@ -276,7 +276,17 @@ class BirthInputPanel(QWidget):
         settings_layout = QFormLayout(settings_group)
         
         self.combo_house_system = QComboBox()
-        self.combo_house_system.addItems(["placidus", "koch", "equal", "whole_sign", "porphyry"])
+        # HOUSE_SYSTEMS_V1: список строится из ядра, подписи русские,
+        # значение элемента - ключ системы (не текст подписи).
+        from astro_core.constants import HOUSE_SYSTEM_CODES, HOUSE_SYSTEM_NAMES_RU
+        for _key in HOUSE_SYSTEM_CODES:
+            self.combo_house_system.addItem(HOUSE_SYSTEM_NAMES_RU.get(_key, _key), _key)
+        self.combo_house_system.setCurrentIndex(0)
+        # PANEL_WIDTH_V2: минимум по короткому префиксу, а не по самой
+        # длинной из 17 систем домов.
+        self.combo_house_system.setSizeAdjustPolicy(
+            QComboBox.SizeAdjustPolicy.AdjustToMinimumContentsLengthWithIcon)
+        self.combo_house_system.setMinimumContentsLength(8)
         settings_layout.addRow("Дома:", self.combo_house_system)
         
         self.radio_tropical = QRadioButton("Тропический")
@@ -288,7 +298,9 @@ class BirthInputPanel(QWidget):
         zodiac_layout = QHBoxLayout()
         zodiac_layout.addWidget(self.radio_tropical)
         zodiac_layout.addWidget(self.radio_sidereal)
-        settings_layout.addRow("Зодиак:", zodiac_layout)
+        # PANEL_WIDTH_V4: строка во всю ширину формы, без колонки подписи.
+        # Пара радио в колонке полей задавала минимум секции ~321 px.
+        settings_layout.addRow(zodiac_layout)
         
         self.combo_ayanamsha = QComboBox()
         self.combo_ayanamsha.addItems(["Лахири", "Раман", "Кришнамурти", "Фаган-Брэдли"])
@@ -304,6 +316,12 @@ class BirthInputPanel(QWidget):
         self.chk_blackmoon = QCheckBox("Лилит")
         self.chk_selena = QCheckBox("Селена")
         self.chk_proserpina = QCheckBox("Прозерпина")
+        self.chk_asteroids = QCheckBox("Астероиды")  # ASTEROIDS_V1
+        self.chk_asteroids.setToolTip("Церера, Паллада, Юнона, Веста (нужен seas_18.se1)")
+        self.chk_asteroids.setChecked(False)
+        self.chk_vertex = QCheckBox("Вертекс")  # VXMP
+        self.chk_vertex.setToolTip("Вертекс - западный горизонт прима-вертикали")
+        self.chk_vertex.setChecked(False)
         self.chk_fortune.setChecked(False)
         self.chk_cross.setChecked(False)
         self.chk_blackmoon.setChecked(False)
@@ -316,20 +334,26 @@ class BirthInputPanel(QWidget):
         obj_layout = QGridLayout()
         obj_layout.addWidget(self.chk_chiron, 0, 0)
         obj_layout.addWidget(self.chk_nodes, 0, 1)
-        obj_layout.addWidget(self.chk_fortune, 0, 2)
-        obj_layout.addWidget(self.chk_cross, 1, 2)
+        obj_layout.addWidget(self.chk_fortune, 1, 0)  # COMPACT_LAYOUT_V1
+        obj_layout.addWidget(self.chk_cross, 1, 1)
+        obj_layout.addWidget(self.chk_vertex, 4, 0)  # VXMP
         obj_layout.addWidget(self.chk_blackmoon, 2, 0)
         obj_layout.addWidget(self.chk_selena, 2, 1)
-        obj_layout.addWidget(self.chk_proserpina, 2, 2)
-        obj_layout.addWidget(self.chk_angles, 1, 0)
-        obj_layout.addWidget(self.chk_dsc, 1, 1)
-        settings_layout.addRow("Подписи и линии:", obj_layout)
+        obj_layout.addWidget(self.chk_proserpina, 3, 0)
+        # OBJECT_FLAGS_V1: ASC/MC и DSC всегда на карте - галочки убраны
+        obj_layout.addWidget(self.chk_asteroids, 3, 1)
+        # PANEL_MIN_V1: сетка галочек в своей группе на всю ширину.
+        # Подпись слева в строке формы добавляла ~120 px к минимуму панели.
+        objects_group = QGroupBox("Подписи и линии")
+        objects_group.setLayout(obj_layout)
         self._connect_display_toggles()
         
         self.edit_ephe_path = QLineEdit("ephe")
-        settings_layout.addRow("Путь к эфемеридам:", self.edit_ephe_path)
+        settings_layout.addRow("Эфемериды:", self.edit_ephe_path)  # PANEL_WIDTH_V2
         
         layout.addWidget(settings_group, 1)
+        # PANEL_WIDTH_V3: группа галочек вне формы — форма уже
+        layout.addWidget(objects_group, 0)
         for _g in (profiles_group, birth_group, city_group,
                    display_group, settings_group):
             _g.setSizePolicy(QSizePolicy.Policy.Preferred,
@@ -371,7 +395,10 @@ class BirthInputPanel(QWidget):
         for widget in [
             self.combo_house_system, self.radio_tropical, self.radio_sidereal,
             self.combo_ayanamsha, self.chk_chiron, self.chk_nodes,
-            self.chk_fortune, self.chk_angles, self.chk_dsc,
+            self.chk_fortune, self.chk_asteroids,
+            # OBJECT_FLAGS_V1: переключатели объектов требуют пересчёта
+            self.chk_cross, self.chk_blackmoon, self.chk_selena, self.chk_proserpina,
+            self.chk_vertex,
         ]:
             if hasattr(widget, 'currentIndexChanged'):
                 widget.currentIndexChanged.connect(self.recalc_triggered.emit)
@@ -386,7 +413,8 @@ class BirthInputPanel(QWidget):
                     self.chk_start_dsc,
                     self.chk_chiron, self.chk_nodes, self.chk_fortune, self.chk_cross,
                     self.chk_blackmoon, self.chk_selena, self.chk_proserpina,
-                    self.chk_angles, self.chk_dsc):
+                    self.chk_angles, self.chk_dsc, self.chk_asteroids,
+                    self.chk_vertex):
             box.stateChanged.connect(lambda _=0: self.display_toggled.emit())
         self.chk_zodiac.stateChanged.connect(self._on_zodiac_toggled)
 
@@ -468,13 +496,11 @@ class BirthInputPanel(QWidget):
             self.chk_blackmoon.setChecked(bool(objects.get("BlackMoon", True)))
             self.chk_selena.setChecked(bool(objects.get("Selena", True)))
             self.chk_proserpina.setChecked(bool(objects.get("Proserpina", True)))
-        if "Angles" in objects:
-            self.chk_angles.setChecked(bool(objects["Angles"]))
-            self.chk_dsc.setChecked(bool(objects["Angles"]))
+            self.chk_asteroids.setChecked(bool(objects.get("Asteroids", False)))
+            self.chk_vertex.setChecked(bool(objects.get("Vertex", False)))
         if appearance:
             pairs = (
                 ("show_planet_labels", self.chk_show_planet_labels),
-                ("show_angle_labels", self.chk_angles),
             )
             for key, box in pairs:
                 if key in appearance:
@@ -530,44 +556,18 @@ class BirthInputPanel(QWidget):
         return nat, total
 
     def _apply_eq_heights(self):
-        """Фикс-высоты: естественная + прирост/5; база и натуралы без обратной связи (37g)."""
-        groups = getattr(self, "_eq_groups", None)
-        if not groups:
-            return
-        nat, total = self._eq_naturals()
-        self._eq_natural_total = total
-        base = getattr(self, "_eq_initial_extra", None)
-        if base is None:
-            base = self._eq_initial_extra = max(0, self.height() - total)
-        delta = (self.height() - total) - base
-        if delta > 0:
-            share = delta // len(groups)
-            for g, h in zip(groups, nat):
-                g.setFixedHeight(h + share)
-        else:
-            for g, h in zip(groups, nat):
-                g.setFixedHeight(h)
+        """LAYOUT: снимаем фиксированные высоты, размеры считает Qt."""
+        for group in (getattr(self, "_eq_groups", None) or []):
+            group.setMinimumHeight(0)
+            group.setMaximumHeight(16777215)
 
     def _capture_eq_baseline(self):
         self._apply_eq_heights()
     def _apply_eq_heights(self):
-        """Точные высоты секций: естественная + прирост/5 (итерация 37f)."""
-        groups = getattr(self, "_eq_groups", None)
-        base = getattr(self, "_eq_initial_extra", None)
-        if not groups or base is None:
-            return
-        for g in groups:
-            g.setMinimumHeight(0)
-            g.setMaximumHeight(16777215)
-        total = self.layout().totalSizeHint().height()
-        delta = (self.height() - total) - base
-        if delta > 0:
-            share = delta // len(groups)
-            for g in groups:
-                g.setFixedHeight(g.sizeHint().height() + share)
-        else:
-            for g in groups:
-                g.setFixedHeight(g.sizeHint().height())
+        """LAYOUT: снимаем фиксированные высоты, размеры считает Qt."""
+        for group in (getattr(self, "_eq_groups", None) or []):
+            group.setMinimumHeight(0)
+            group.setMaximumHeight(16777215)
 
     def _request_left_layout_apply(self):
         w = self.window()
@@ -580,7 +580,7 @@ class BirthInputPanel(QWidget):
     def _on_manual_coords_toggled(self, checked: bool):
         """Toggle manual coordinates visibility."""
         self.manual_widget.setVisible(checked)
-        self.manual_coords_header.setText(("▼ " if checked else "▶ ") + "Ручные координаты")
+        self.manual_coords_header.setText(("▼ " if checked else "▶ ") + "Координаты")
         
     def _on_zodiac_changed(self):
         self.combo_ayanamsha.setEnabled(self.radio_sidereal.isChecked())
@@ -684,6 +684,12 @@ class BirthInputPanel(QWidget):
                     except Exception:
                         continue
         return dp.get_builtin_profile("full")
+    def set_house_system(self, key: str):
+        """Выбирает систему домов по ключу ядра (HOUSE_SYSTEMS_V1)."""
+        index = self.combo_house_system.findData(key)
+        if index >= 0:
+            self.combo_house_system.setCurrentIndex(index)
+
     def get_settings(self) -> dict:
         """Get calculation settings from form."""
         zodiac = "sidereal" if self.radio_sidereal.isChecked() else "tropical"
@@ -692,7 +698,8 @@ class BirthInputPanel(QWidget):
             "Кришнамурти": "krishnamurti", "Фаган-Брэдли": "fagan_brady"
         }
         return {
-            "house_system": self.combo_house_system.currentText(),
+            "house_system": (self.combo_house_system.currentData()
+                             or self.combo_house_system.currentText()),
             "zodiac": zodiac,
             "ayanamsha": ayanamsha_map.get(self.combo_ayanamsha.currentText(), "lahiri"),
             "include_chiron": self.chk_chiron.isChecked(),
@@ -702,12 +709,23 @@ class BirthInputPanel(QWidget):
             "include_black_moon": self.chk_blackmoon.isChecked(),
             "include_selena": self.chk_selena.isChecked(),
             "include_proserpina": self.chk_proserpina.isChecked(),
-            "include_angles": self.chk_angles.isChecked(),
-            "include_dsc": self.chk_dsc.isChecked(),
+            "include_asteroids": self.chk_asteroids.isChecked(),
+            # OBJECT_FLAGS_V1: углы всегда в расчёте и на карте
+            "include_angles": True,
+            "include_dsc": True,
+            # OBJECT_FLAGS_V1: приоритет переключателей над профилем
+            "object_overrides": {
+                "include_cross_of_fate": self.chk_cross.isChecked(),
+                "include_black_moon": self.chk_blackmoon.isChecked(),
+                "include_selena": self.chk_selena.isChecked(),
+                "include_proserpina": self.chk_proserpina.isChecked(),
+                "include_asteroids": self.chk_asteroids.isChecked(),
+                "include_vertex": self.chk_vertex.isChecked(),  # VXMP
+            },
             "show_planet_labels": self.chk_show_planet_labels.isChecked(),
-            "show_asteroid_labels": self.chk_chiron.isChecked(),
+            "show_asteroid_labels": self.chk_asteroids.isChecked(),
             "show_node_labels": self.chk_nodes.isChecked(),
-            "show_angle_labels": self.chk_angles.isChecked(),
+            "show_angle_labels": True,
             "ephe_path": self.edit_ephe_path.text() or None,
         }
         
